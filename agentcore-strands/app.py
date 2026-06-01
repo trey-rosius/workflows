@@ -17,13 +17,28 @@ summarizer = Agent(
 # QA Agent (Nova Lite)
 qa_generator = Agent(
     model=model,
-    system_prompt="You are an educational assessment expert. Your task is to generate exactly 5 high-quality Question & Answer pairs based on the provided video analysis. Output as a clean markdown list of Q&A."
+    system_prompt=(
+        "You are an educational assessment expert. Your task is to generate exactly 5 high-quality multiple-choice questions (MCQs) based on the provided video analysis.\n"
+        "Output format MUST be a clean markdown list. Each MCQ must follow this format exactly:\n"
+        "- **Question:** [Question text]\n"
+        "  **A:** [Option A text] (Correct)\n"
+        "  **B:** [Option B text]\n"
+        "  **C:** [Option C text]\n"
+        "  **D:** [Option D text]\n"
+        "Exactly one option must be marked with '(Correct)'. Do not use numbered lists, headers, or any other formatting."
+    )
 )
 
 # Flashcard Agent (Nova Lite)
 flashcard_generator = Agent(
     model=model,
-    system_prompt="You are an expert in active recall study methods. Your task is to generate exactly 5 educational flashcards (Front/Back) based on the provided video analysis. Output as a clean markdown list."
+    system_prompt=(
+        "You are an expert in active recall study methods. Your task is to generate exactly 5 educational flashcards based on the provided video analysis.\n"
+        "Output format MUST be a clean markdown list. Each flashcard must follow this format exactly:\n"
+        "- **Front:** [Question or term to recall]\n"
+        "  **Back:** [Explanation or answer]\n"
+        "Do not use numbered lists, headers, or separators."
+    )
 )
 
 # Reviewer Agent (Nova Pro - Advanced Model)

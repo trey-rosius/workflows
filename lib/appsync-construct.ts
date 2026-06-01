@@ -150,7 +150,27 @@ export class AppSyncConstruct extends Construct {
       retention: logs.RetentionDays.ONE_WEEK,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
-    const strandsMultiAgentFunctionLogs = new logs.LogGroup(this, "strandsMultiAgentFunctionLogs", {
+    const transcribeFunctionLogs = new logs.LogGroup(this, "transcribeFunctionLogs", {
+      retention: logs.RetentionDays.ONE_WEEK,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+    const translateFunctionLogs = new logs.LogGroup(this, "translateFunctionLogs", {
+      retention: logs.RetentionDays.ONE_WEEK,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+    const segmentSyllabusFunctionLogs = new logs.LogGroup(this, "segmentSyllabusFunctionLogs", {
+      retention: logs.RetentionDays.ONE_WEEK,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+    const sliceSegmentFunctionLogs = new logs.LogGroup(this, "sliceSegmentFunctionLogs", {
+      retention: logs.RetentionDays.ONE_WEEK,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+    const generateAssetsFunctionLogs = new logs.LogGroup(this, "generateAssetsFunctionLogs", {
+      retention: logs.RetentionDays.ONE_WEEK,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+    const saveDraftFunctionLogs = new logs.LogGroup(this, "saveDraftFunctionLogs", {
       retention: logs.RetentionDays.ONE_WEEK,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
@@ -177,59 +197,125 @@ export class AppSyncConstruct extends Construct {
       compatibleRuntimes: [lambda.Runtime.PYTHON_3_12],
     });
 
-    const strandsMultiAgentFunction = new PythonFunction(this, "strandsMultiAgentFunction", {
-      entry: "./src/py/",
-      handler: "lambda_handler",
-      index: "strands_multi_agent.py",
-      runtime: lambda.Runtime.PYTHON_3_12,
-      memorySize: 2048,
-      ephemeralStorageSize: cdk.Size.mebibytes(2048),
-      timeout: cdk.Duration.minutes(15),
-      logGroup: strandsMultiAgentFunctionLogs,
-      tracing: lambda.Tracing.ACTIVE,
-      layers: [ffmpegLayer],
-      environment: {
-        TABLE_NAME: videoAssetsTable.tableName,
-        VECTOR_BUCKET_NAME: vectorBucket.vectorBucketName,
-        VECTOR_INDEX_NAME: vectorIndex.indexName,
-      },
+    const putEventsPolicy = new iam.PolicyStatement({
+      actions: ["events:PutEvents"],
+      resources: [`arn:aws:events:${cdk.Stack.of(this).region}:${cdk.Stack.of(this).account}:event-bus/VideoAgentEventBus`],
     });
 
-    videoAssetsTable.grantReadWriteData(strandsMultiAgentFunction);
-    this.mediaBucket.grantReadWrite(strandsMultiAgentFunction);
-    
-    strandsMultiAgentFunction.addToRolePolicy(
+    const transcribeFunction = new PythonFunction(this, "transcribeFunction", {
+      entry: "./src/py/",
+      handler: "handler",
+      index: "transcribe.py",
+      runtime: lambda.Runtime.PYTHON_3_12,
+      timeout: cdk.Duration.minutes(5),
+      logGroup: transcribeFunctionLogs,
+      tracing: lambda.Tracing.ACTIVE,
+      environment: {
+        TABLE_NAME: videoAssetsTable.tableName,
+      },
+    });
+    transcribeFunction.addToRolePolicy(putEventsPolicy);
+    transcribeFunction.addToRolePolicy(
       new iam.PolicyStatement({
         actions: ["transcribe:StartTranscriptionJob", "transcribe:GetTranscriptionJob"],
         resources: ["*"],
-        effect: iam.Effect.ALLOW,
       })
     );
 
-    strandsMultiAgentFunction.addToRolePolicy(
+    const translateFunction = new PythonFunction(this, "translateFunction", {
+      entry: "./src/py/",
+      handler: "handler",
+      index: "translate.py",
+      runtime: lambda.Runtime.PYTHON_3_12,
+      timeout: cdk.Duration.minutes(5),
+      logGroup: translateFunctionLogs,
+      tracing: lambda.Tracing.ACTIVE,
+      environment: {
+        TABLE_NAME: videoAssetsTable.tableName,
+      },
+    });
+    translateFunction.addToRolePolicy(putEventsPolicy);
+    translateFunction.addToRolePolicy(
       new iam.PolicyStatement({
-        actions: ["bedrock:InvokeModel", "bedrock:StartAsyncInvoke", "bedrock:GetAsyncInvoke"],
+        actions: ["translate:TranslateText"],
         resources: ["*"],
-        effect: iam.Effect.ALLOW,
       })
     );
-    strandsMultiAgentFunction.addToRolePolicy(
+
+    const segmentSyllabusFunction = new PythonFunction(this, "segmentSyllabusFunction", {
+      entry: "./src/py/",
+      handler: "handler",
+      index: "segment_syllabus.py",
+      runtime: lambda.Runtime.PYTHON_3_12,
+      timeout: cdk.Duration.minutes(5),
+      logGroup: segmentSyllabusFunctionLogs,
+      tracing: lambda.Tracing.ACTIVE,
+      environment: {
+        TABLE_NAME: videoAssetsTable.tableName,
+      },
+    });
+    segmentSyllabusFunction.addToRolePolicy(putEventsPolicy);
+    segmentSyllabusFunction.addToRolePolicy(
       new iam.PolicyStatement({
-        actions: ["s3vectors:QueryVectors", "s3vectors:GetVectors"],
+        actions: ["bedrock:InvokeModel"],
         resources: ["*"],
       })
     );
-    strandsMultiAgentFunction.addToRolePolicy(
+
+    const sliceSegmentFunction = new PythonFunction(this, "sliceSegmentFunction", {
+      entry: "./src/py/",
+      handler: "handler",
+      index: "slice_segment.py",
+      runtime: lambda.Runtime.PYTHON_3_12,
+      memorySize: 2048,
+      ephemeralStorageSize: cdk.Size.mebibytes(2048),
+      timeout: cdk.Duration.minutes(10),
+      logGroup: sliceSegmentFunctionLogs,
+      tracing: lambda.Tracing.ACTIVE,
+      layers: [ffmpegLayer],
+    });
+    sliceSegmentFunction.addToRolePolicy(putEventsPolicy);
+    this.mediaBucket.grantReadWrite(sliceSegmentFunction);
+
+    const generateAssetsFunction = new PythonFunction(this, "generateAssetsFunction", {
+      entry: "./src/py/",
+      handler: "handler",
+      index: "generate_assets.py",
+      runtime: lambda.Runtime.PYTHON_3_12,
+      timeout: cdk.Duration.minutes(10),
+      logGroup: generateAssetsFunctionLogs,
+      tracing: lambda.Tracing.ACTIVE,
+    });
+    generateAssetsFunction.addToRolePolicy(putEventsPolicy);
+    generateAssetsFunction.addToRolePolicy(
       new iam.PolicyStatement({
         actions: [
           "bedrock-agentcore:InvokeAgentRuntime",
           "bedrock-agentcore:ListAgentRuntimes",
           "bedrock-agentcore-control:ListAgentRuntimes",
+          "translate:TranslateText",
         ],
         resources: ["*"],
       })
     );
-    encryptionKey.grantEncryptDecrypt(strandsMultiAgentFunction);
+
+    const saveDraftFunction = new PythonFunction(this, "saveDraftFunction", {
+      entry: "./src/py/",
+      handler: "handler",
+      index: "save_draft.py",
+      runtime: lambda.Runtime.PYTHON_3_12,
+      timeout: cdk.Duration.minutes(5),
+      logGroup: saveDraftFunctionLogs,
+      tracing: lambda.Tracing.ACTIVE,
+      environment: {
+        TABLE_NAME: videoAssetsTable.tableName,
+      },
+    });
+    saveDraftFunction.addToRolePolicy(putEventsPolicy);
+    videoAssetsTable.grantReadWriteData(saveDraftFunction);
+    videoAssetsTable.grantReadWriteData(transcribeFunction);
+    videoAssetsTable.grantReadWriteData(translateFunction);
+    videoAssetsTable.grantReadWriteData(segmentSyllabusFunction);
 
     const stateMachineRole = new iam.Role(this, "StateMachineRole", {
       assumedBy: new iam.ServicePrincipal("states.amazonaws.com"),
@@ -245,7 +331,12 @@ export class AppSyncConstruct extends Construct {
       ),
       definitionSubstitutions: {
         FUNCTION_ARN: this.saveEmbeddingsFunction.functionArn,
-        MULTI_AGENT_FUNCTION_ARN: strandsMultiAgentFunction.functionArn,
+        TRANSCRIBE_FUNCTION_ARN: transcribeFunction.functionArn,
+        TRANSLATE_FUNCTION_ARN: translateFunction.functionArn,
+        SEGMENT_SYLLABUS_FUNCTION_ARN: segmentSyllabusFunction.functionArn,
+        SLICE_SEGMENT_FUNCTION_ARN: sliceSegmentFunction.functionArn,
+        GENERATE_ASSETS_FUNCTION_ARN: generateAssetsFunction.functionArn,
+        SAVE_DRAFT_FUNCTION_ARN: saveDraftFunction.functionArn,
       },
       role: stateMachineRole,
       tracingEnabled: true,
@@ -263,7 +354,15 @@ export class AppSyncConstruct extends Construct {
     stateMachineRole.addToPolicy(
       new iam.PolicyStatement({
         actions: ["lambda:InvokeFunction"],
-        resources: [this.saveEmbeddingsFunction.functionArn, strandsMultiAgentFunction.functionArn],
+        resources: [
+          this.saveEmbeddingsFunction.functionArn,
+          transcribeFunction.functionArn,
+          translateFunction.functionArn,
+          segmentSyllabusFunction.functionArn,
+          sliceSegmentFunction.functionArn,
+          generateAssetsFunction.functionArn,
+          saveDraftFunction.functionArn,
+        ],
         effect: iam.Effect.ALLOW,
       })
     );
@@ -534,6 +633,14 @@ export class AppSyncConstruct extends Construct {
       dataSource: videoAssetsDs,
       runtime: appsync.FunctionRuntime.JS_1_0_0,
       code: appsync.Code.fromAsset("./resolvers/listVideoAssets.js"),
+    });
+
+    this.api.createResolver("SaveDraftEditsResolver", {
+      typeName: "Mutation",
+      fieldName: "saveDraftEdits",
+      dataSource: videoAssetsDs,
+      runtime: appsync.FunctionRuntime.JS_1_0_0,
+      code: appsync.Code.fromAsset("./resolvers/saveDraftEdits.js"),
     });
 
     this.api.addEnvironmentVariable("FOUNDATION_MODEL_ARN", BEDROCK_MODELS.CLAUDE_3_5_SONNET);

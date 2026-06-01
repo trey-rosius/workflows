@@ -6,6 +6,13 @@ type VideoStatus @aws_iam @aws_api_key @aws_cognito_user_pools {
   videoUrl: String
 }
 
+type LocalizedAssets @aws_api_key @aws_cognito_user_pools {
+  summary: String
+  qa: String
+  flashcards: String
+  keyTakeaways: String
+}
+
 type Lesson @aws_api_key @aws_cognito_user_pools {
   title: String!
   module: String!
@@ -17,16 +24,23 @@ type Lesson @aws_api_key @aws_cognito_user_pools {
   qa: String
   flashcards: String
   keyTakeaways: String
+  translations: [String]
+  localized: [LocalizedAssets]
 }
 
 type VideoAssets @aws_api_key @aws_cognito_user_pools {
   videoUri: String!
+  title: String
+  description: String
+  status: String
   summary: String
   qa: String
   flashcards: String
   lessons: [Lesson]
   createdAt: String
   keyTakeaways: String
+  translations: [String]
+  localized: [LocalizedAssets]
 }
 type UploadUrl @aws_api_key @aws_cognito_user_pools {
   url: String!
@@ -54,6 +68,16 @@ type Mutation {
     approved: Boolean!
     message: String
     callbackId: String!
+  ): Boolean! @aws_api_key @aws_cognito_user_pools
+
+  saveDraftEdits(
+    videoUri: String!
+    title: String
+    description: String
+    summary: String
+    qa: String
+    flashcards: String
+    keyTakeaways: String
   ): Boolean! @aws_api_key @aws_cognito_user_pools
 
   getUploadUrl(fileName: String!, contentType: String!): UploadUrl! @aws_api_key @aws_cognito_user_pools

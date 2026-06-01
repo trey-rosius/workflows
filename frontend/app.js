@@ -6,11 +6,18 @@ const REGION = window.ENV.REGION;
 
 // Global App State
 let videos = [];
+let activeLanguage = "en";
 let activeVideoUri = null;
 let activeLessonIndex = null; // null represents the full original video
 let flashcards = [];
 let currentCardIndex = 0;
 const pollingIntervals = new Map();
+
+// Interactive Quiz State
+let quizQuestions = [];
+let quizCurrentIndex = 0;
+let quizScore = 0;
+let quizAnswersSelected = [];
 
 // Elements References
 const dropzone = document.getElementById("dropzone");
@@ -85,53 +92,133 @@ function parseMarkdown(mdText) {
 function parseQA(qaText) {
   if (!qaText) return [];
   const qas = [];
-  const parts = qaText.split(/(?=- \*\*Q)/);
-  for (let part of parts) {
-    part = part.trim();
-    if (!part) continue;
-    
-    const lines = part.split('\n');
-    let question = "";
-    let answer = "";
-    for (let line of lines) {
-      line = line.trim();
-      if (line.includes('**Q') || line.startsWith('- **Q')) {
-        question = line.replace(/^-?\s*\*\*Q\d+:\s*/i, '').replace(/\*\*+/g, '').replace(/^-?\s*/, '').trim();
-      } else if (line.includes('**A') || line.includes('- **A')) {
-        answer = line.replace(/^\s*-?\s*\*\*A\d+:\s*/i, '').replace(/\*\*+/g, '').replace(/^\s*-?\s*/, '').trim();
+  const lines = qaText.split('\n');
+
+  const qRegex = /^\s*(?:\d+\.|\*|-)?\s*\*\*?(?:Q|Question)(?:\s*\d+)?\*\*?\s*:/i;
+  const aRegex = /^\s*(?:\d+\.|\*|-)?\s*\*\*?(?:A|Answer)(?:\s*\d+)?\*\*?\s*:/i;
+  const optRegex = /^\s*(?:\d+\.|\*|-)?\s*\*\*?([A-D])\*\*?\s*:/i;
+
+  let currentItem = null;
+
+  for (let line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    if (qRegex.test(trimmed)) {
+      if (currentItem) {
+        qas.push(currentItem);
+      }
+      const qText = trimmed
+        .replace(/^\s*(?:\d+\.|\*|-)\s*/, '')
+        .replace(/^\*\*?(?:Q|Question)(?:\s*\d+)?\*\*?\s*:\s*\*\*?/i, '')
+        .replace(/\*\*+\s*$/, '')
+        .trim();
+      currentItem = {
+        question: qText,
+        options: [],
+        correctIndex: null,
+        answer: ""
+      };
+    } else if (aRegex.test(trimmed) && currentItem) {
+      currentItem.answer = trimmed
+        .replace(/^\s*(?:\d+\.|\*|-)\s*/, '')
+        .replace(/^\*\*?(?:A|Answer)(?:\s*\d+)?\*\*?\s*:\s*\*\*?/i, '')
+        .replace(/\*\*+\s*$/, '')
+        .trim();
+    } else if (optRegex.test(trimmed) && currentItem) {
+      const match = trimmed.match(optRegex);
+      const optionLetter = match[1].toUpperCase();
+      let optionText = match[2].trim();
+      
+      const isCorrect = optionText.toLowerCase().includes('(correct)') || optionText.toLowerCase().includes('[correct]');
+      optionText = optionText
+        .replace(/\s*[\(\[]correct[\)\]]\s*/i, '')
+        .replace(/\*\*+\s*$/, '')
+        .trim();
+
+      const optionIndex = optionLetter.charCodeAt(0) - 65; // A=0, B=1, etc.
+      currentItem.options[optionIndex] = optionText;
+      if (isCorrect) {
+        currentItem.correctIndex = optionIndex;
+        currentItem.answer = optionText;
+      }
+    } else if (currentItem) {
+      if (currentItem.answer) {
+        currentItem.answer += "\n" + trimmed;
+      } else {
+        currentItem.question += "\n" + trimmed;
       }
     }
-    if (question && answer) {
-      qas.push({ question, answer });
-    }
   }
-  return qas;
+
+  if (currentItem) {
+    qas.push(currentItem);
+  }
+
+  return qas.map(item => {
+    if (item.options.length > 0) {
+      item.options = item.options.filter(opt => opt !== undefined);
+      if (item.correctIndex === null) {
+        item.correctIndex = 0;
+      }
+    }
+    return item;
+  });
 }
 
 // Flashcard Parser Helper
 function parseFlashcards(fcText) {
   if (!fcText) return [];
   const cards = [];
-  const parts = fcText.split(/(?=- \*\*Front)/i);
-  for (let part of parts) {
-    part = part.trim();
-    if (!part) continue;
-    
-    const lines = part.split('\n');
-    let front = "";
-    let back = "";
-    for (let line of lines) {
-      line = line.trim();
-      if (line.toLowerCase().includes('front')) {
-        front = line.replace(/^-?\s*\*\*Front:\s*\*\*/i, '').replace(/^-?\s*\*\*Front:\s*/i, '').replace(/\*\*+/g, '').trim();
-      } else if (line.toLowerCase().includes('back')) {
-        back = line.replace(/^\s*-?\s*\*\*Back:\s*\*\*/i, '').replace(/^\s*-?\s*\*\*Back:\s*/i, '').replace(/\*\*+/g, '').trim();
+  const lines = fcText.split('\n');
+
+  const frontRegex = /^\s*(?:\d+\.|\*|-)?\s*\*\*?(?:Front)(?:\s*\d+)?\*\*?\s*:/i;
+  const backRegex = /^\s*(?:\d+\.|\*|-)?\s*\*\*?(?:Back)(?:\s*\d+)?\*\*?\s*:/i;
+
+  let currentFront = "";
+  let currentBack = "";
+
+  for (let line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    const isHeaderOrSeparator = trimmed.startsWith('#') || trimmed.startsWith('---');
+
+    if (frontRegex.test(trimmed)) {
+      if (currentFront && currentBack) {
+        cards.push({ 
+          front: currentFront.replace(/\*\*+\s*$/, '').trim(), 
+          back: currentBack.replace(/\*\*+\s*$/, '').trim() 
+        });
+      }
+      currentFront = trimmed
+        .replace(/^\s*(?:\d+\.|\*|-)\s*/, '')
+        .replace(/^\*\*?(?:Front)(?:\s*\d+)?\*\*?\s*:\s*\*\*?/i, '')
+        .replace(/\*\*+\s*$/, '')
+        .trim();
+      currentBack = "";
+    } else if (backRegex.test(trimmed)) {
+      currentBack = trimmed
+        .replace(/^\s*(?:\d+\.|\*|-)\s*/, '')
+        .replace(/^\*\*?(?:Back)(?:\s*\d+)?\*\*?\s*:\s*\*\*?/i, '')
+        .replace(/\*\*+\s*$/, '')
+        .trim();
+    } else if (!isHeaderOrSeparator) {
+      if (currentBack) {
+        currentBack += "\n" + trimmed;
+      } else if (currentFront) {
+        currentFront += "\n" + trimmed;
       }
     }
-    if (front && back) {
-      cards.push({ front, back });
-    }
   }
+
+  if (currentFront && currentBack) {
+    cards.push({ 
+      front: currentFront.replace(/\*\*+\s*$/, '').trim(), 
+      back: currentBack.replace(/\*\*+\s*$/, '').trim() 
+    });
+  }
+
   return cards;
 }
 
@@ -166,10 +253,19 @@ async function loadLibrary() {
       query ListVideoAssets {
         listVideoAssets {
           videoUri
+          title
+          status
           summary
           qa
           flashcards
           keyTakeaways
+          translations
+          localized {
+            summary
+            qa
+            flashcards
+            keyTakeaways
+          }
           lessons {
             title
             module
@@ -181,6 +277,13 @@ async function loadLibrary() {
             qa
             flashcards
             keyTakeaways
+            translations
+            localized {
+              summary
+              qa
+              flashcards
+              keyTakeaways
+            }
           }
           createdAt
         }
@@ -191,8 +294,9 @@ async function loadLibrary() {
     
     videos = apiVideos.map(v => ({
       ...v,
-      status: v.summary ? "COMPLETED" : "PROCESSING",
+      status: v.status || (v.summary ? "COMPLETED" : "PROCESSING"),
       fileName: v.videoUri.split("/").pop(),
+      title: v.title || v.videoUri.split("/").pop()
     }));
 
     videos.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
@@ -234,6 +338,45 @@ function removeLocalProcessingVideo(videoUri) {
   localStorage.setItem("educloud_processing_videos", JSON.stringify(list));
 }
 
+// Progress Stepper Helper
+function getProgressStepperHTML(status, message) {
+  const steps = [
+    { key: "TRANSCRIBING", label: "Transcribing audio content", icon: "✍️" },
+    { key: "TRANSLATING", label: "Translating to target languages", icon: "🌐" },
+    { key: "SEGMENTING", label: "Segmenting syllabus & modules", icon: "📦" },
+    { key: "GENERATING", label: "Drafting summaries, quizzes & flashcards", icon: "🤖" },
+    { key: "DRAFT", label: "Ready for Tutor Review", icon: "👥" }
+  ];
+
+  // Determine current active step index
+  let activeIndex = 0;
+  if (status === "TRANSLATING") activeIndex = 1;
+  else if (status === "SEGMENTING") activeIndex = 2;
+  else if (status === "GENERATING") activeIndex = 3;
+  else if (status === "DRAFT" || status === "COMPLETED" || status === "PUBLISHED") activeIndex = 4;
+
+  return `
+    <div class="progress-stepper">
+      ${steps.map((step, idx) => {
+        let stepClass = "";
+        if (idx < activeIndex) stepClass = "completed";
+        else if (idx === activeIndex) stepClass = "active";
+        else stepClass = "pending";
+        
+        return `
+          <div class="step-item ${stepClass}">
+            <span class="step-icon">${stepClass === 'completed' ? '✅' : step.icon}</span>
+            <span class="step-label">${step.label}</span>
+          </div>
+        `;
+      }).join("")}
+    </div>
+    <p class="step-message-text" style="margin-top: 1rem; font-style: italic; color: var(--accent-cyan); font-size: 0.8rem;">
+      Message: ${message || 'Working on syllabus generation...'}
+    </p>
+  `;
+}
+
 // Render video sidebar
 function renderVideoList() {
   videoCountBadge.textContent = videos.length;
@@ -244,13 +387,13 @@ function renderVideoList() {
 
   videoList.innerHTML = videos.map(video => {
     const isSelected = video.videoUri === activeVideoUri;
-    const isCompleted = video.status === "COMPLETED";
-    const statusText = isCompleted ? "Completed" : "Processing";
-    const statusClass = isCompleted ? "status-completed" : "status-processing";
+    const isReady = video.status === "COMPLETED" || video.status === "DRAFT" || video.status === "PUBLISHED";
+    const statusText = isReady ? (video.status === "DRAFT" ? "Draft (Review)" : "Completed") : "Processing";
+    const statusClass = isReady ? "status-completed" : "status-processing";
 
     return `
       <div class="video-item ${isSelected ? 'active' : ''}" onclick="selectVideo('${video.videoUri}')">
-        <div class="video-item-name">${video.fileName}</div>
+        <div class="video-item-name">${video.title || video.fileName}</div>
         <div class="video-item-meta">
           <span class="status-indicator ${statusClass}">
             <span class="status-dot"></span>
@@ -266,6 +409,7 @@ function renderVideoList() {
 // Selection handling
 async function selectVideo(videoUri) {
   activeVideoUri = videoUri;
+  activeLanguage = "en";
   activeLessonIndex = null; // Default to full video
   renderVideoList();
   
@@ -275,16 +419,29 @@ async function selectVideo(videoUri) {
   welcomeScreen.classList.add("hidden");
   workspace.classList.remove("hidden");
   
-  activeVideoTitle.textContent = video.fileName;
-  activeVideoStatus.textContent = video.status;
-  activeVideoStatus.className = `status-badge ${video.status === 'COMPLETED' ? 'status-completed' : 'status-processing'}`;
+  const isReady = video.status === 'COMPLETED' || video.status === 'DRAFT' || video.status === 'PUBLISHED';
+  const displayStatus = video.status === "DRAFT" ? "DRAFT (REVIEW)" : video.status;
+  
+  activeVideoTitle.textContent = video.title || video.fileName;
+  activeVideoStatus.textContent = displayStatus;
+  activeVideoStatus.className = `status-badge ${isReady ? 'status-completed' : 'status-processing'}`;
 
   console.log("selectVideo called for URI:", videoUri, "Status:", video.status);
-  if (video.status === "PROCESSING") {
+  renderHeaderActions(video);
+  if (!isReady) {
     videoPlayer.closest(".video-column").querySelector(".player-container").classList.add("hidden");
     processingBanner.classList.remove("hidden");
     document.querySelector(".insights-column").classList.add("hidden");
-    syllabusContent.innerHTML = `<p class="text-muted">Analyzing syllabus modules in background...</p>`;
+    
+    const stepperHTML = getProgressStepperHTML(video.status, video.message);
+    processingBanner.innerHTML = `
+      <div class="pulse-ring"></div>
+      <div class="banner-text">
+        <h3>AI Syllabus Generation in Progress...</h3>
+        ${stepperHTML}
+      </div>
+    `;
+    syllabusContent.innerHTML = `<p class="text-muted">Analyzing syllabus modules in background... (Step: ${video.status})</p>`;
   } else {
     videoPlayer.closest(".video-column").querySelector(".player-container").classList.remove("hidden");
     processingBanner.classList.add("hidden");
@@ -412,32 +569,21 @@ window.selectLesson = async function(lessonIndex) {
 function renderLearningAssets(source) {
   console.log("renderLearningAssets called for source:", source);
   try {
+    const localizedSource = getLocalizedSource(source);
     // Summary
-    const summaryHTML = parseMarkdown(source.summary);
+    const summaryHTML = parseMarkdown(localizedSource.summary);
     document.getElementById("summary-text").innerHTML = summaryHTML;
 
     // Key Takeaways
-    const takeawaysHTML = parseMarkdown(source.keyTakeaways || "No key takeaways generated for this selection.");
+    const takeawaysHTML = parseMarkdown(localizedSource.keyTakeaways || "No key takeaways generated for this selection.");
     document.getElementById("takeaways-text").innerHTML = takeawaysHTML;
 
-    // Q&A
-    const qas = parseQA(source.qa);
-    const qaListContainer = document.getElementById("qa-list");
-    if (qas.length === 0) {
-      qaListContainer.innerHTML = `<p class="text-muted">No Q&As generated for this selection.</p>`;
-    } else {
-      qaListContainer.innerHTML = qas.map((qa, index) => `
-        <div class="qa-card" id="qa-card-${index}">
-          <header class="qa-header" onclick="toggleQA(${index})">
-            <span class="qa-question">Q${index+1}: ${qa.question}</span>
-            <span class="qa-toggle">▼</span>
-          </header>
-          <div class="qa-body">
-            <div class="qa-answer">${qa.answer}</div>
-          </div>
-        </div>
-      `).join("");
-    }
+    // Q&A / Quiz Init
+    quizQuestions = parseQA(localizedSource.qa);
+    quizCurrentIndex = 0;
+    quizScore = 0;
+    quizAnswersSelected = new Array(quizQuestions.length).fill(null);
+    renderQuiz();
 
     // Flashcards
     flashcards = parseFlashcards(source.flashcards);
@@ -450,18 +596,186 @@ function renderLearningAssets(source) {
   }
 }
 
-// Accordion toggle
-window.toggleQA = function(index) {
-  const card = document.getElementById(`qa-card-${index}`);
-  const body = card.querySelector(".qa-body");
-  
-  if (card.classList.contains("open")) {
-    card.classList.remove("open");
-    body.style.maxHeight = "0px";
-  } else {
-    card.classList.add("open");
-    body.style.maxHeight = body.scrollHeight + "px";
+// Render Interactive Quiz
+window.renderQuiz = function() {
+  const container = document.getElementById("qa-list");
+  if (!container) return;
+
+  if (!quizQuestions || quizQuestions.length === 0) {
+    container.innerHTML = `<p class="text-muted">No quiz questions generated for this selection.</p>`;
+    return;
   }
+
+  if (quizCurrentIndex >= quizQuestions.length) {
+    // Render Results Screen
+    const percent = Math.round((quizScore / quizQuestions.length) * 100);
+    let gradeMsg = "Excellent job! 🎉";
+    if (percent < 50) gradeMsg = "Keep practicing! 📚";
+    else if (percent < 80) gradeMsg = "Great effort! 👍";
+
+    container.innerHTML = `
+      <div class="quiz-results-card">
+        <h3>🏆 Quiz Completed!</h3>
+        <div class="quiz-score-circle">
+          <div class="score-number">${quizScore} / ${quizQuestions.length}</div>
+          <div class="score-percent">${percent}%</div>
+        </div>
+        <p class="quiz-grade-msg">${gradeMsg}</p>
+        
+        <div class="quiz-summary-list">
+          ${quizQuestions.map((q, idx) => {
+            const isCorrect = quizAnswersSelected[idx] === q.correctIndex;
+            const selectedText = q.options.length > 0 ? (q.options[quizAnswersSelected[idx]] || "No answer") : "Answered";
+            return `
+              <div class="quiz-summary-item ${isCorrect ? 'correct' : 'incorrect'}">
+                <div class="summary-q-header">
+                  <span class="summary-status-icon">${isCorrect ? '✅' : '❌'}</span>
+                  <strong>Q${idx + 1}: ${q.question}</strong>
+                </div>
+                <div class="summary-q-body">
+                  ${q.options.length > 0 ? `
+                    <div class="summary-text">Your answer: <span class="selected-ans">${selectedText}</span></div>
+                    ${!isCorrect ? `<div class="summary-text">Correct answer: <span class="correct-ans">${q.options[q.correctIndex]}</span></div>` : ''}
+                  ` : `
+                    <div class="summary-text">Answer: <span class="correct-ans">${q.answer}</span></div>
+                  `}
+                </div>
+              </div>
+            `;
+          }).join("")}
+        </div>
+        
+        <button class="btn-quiz-retry" onclick="restartQuiz()">🔄 Restart Quiz</button>
+      </div>
+    `;
+    return;
+  }
+
+  const currentQ = quizQuestions[quizCurrentIndex];
+  const progressPercent = Math.round((quizCurrentIndex / quizQuestions.length) * 100);
+  const selectedOption = quizAnswersSelected[quizCurrentIndex];
+  const hasAnswered = selectedOption !== null;
+
+  // Check if it's MCQ
+  const isMCQ = currentQ.options && currentQ.options.length > 0;
+
+  if (isMCQ) {
+    container.innerHTML = `
+      <div class="quiz-card">
+        <div class="quiz-progress-container">
+          <div class="quiz-progress-bar" style="width: ${progressPercent}%"></div>
+        </div>
+        <div class="quiz-card-header">
+          <span class="quiz-question-num">Question ${quizCurrentIndex + 1} of ${quizQuestions.length}</span>
+          <span class="quiz-score-badge">Score: ${quizScore}</span>
+        </div>
+        <h3 class="quiz-question-text">${currentQ.question}</h3>
+        
+        <div class="quiz-options-list">
+          ${currentQ.options.map((opt, idx) => {
+            const letter = String.fromCharCode(65 + idx); // A, B, C, D
+            let optClass = "";
+            let statusIcon = "";
+            
+            if (hasAnswered) {
+              if (idx === currentQ.correctIndex) {
+                optClass = "correct";
+                statusIcon = "✅";
+              } else if (idx === selectedOption) {
+                optClass = "incorrect";
+                statusIcon = "❌";
+              } else {
+                optClass = "disabled";
+              }
+            }
+            
+            return `
+              <button class="quiz-option-btn ${optClass}" onclick="selectQuizOption(${idx})" ${hasAnswered ? 'disabled' : ''}>
+                <span class="option-letter">${letter}</span>
+                <span class="option-text">${opt}</span>
+                <span class="option-status-icon">${statusIcon}</span>
+              </button>
+            `;
+          }).join("")}
+        </div>
+        
+        ${hasAnswered ? `
+          <div class="quiz-actions">
+            <button class="quiz-next-btn" onclick="nextQuizQuestion()">
+              ${quizCurrentIndex === quizQuestions.length - 1 ? '🏁 Finish Quiz' : '➡️ Next Question'}
+            </button>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  } else {
+    // Open-ended Q&A fallback
+    container.innerHTML = `
+      <div class="quiz-card open-ended">
+        <div class="quiz-progress-container">
+          <div class="quiz-progress-bar" style="width: ${progressPercent}%"></div>
+        </div>
+        <div class="quiz-card-header">
+          <span class="quiz-question-num">Question ${quizCurrentIndex + 1} of ${quizQuestions.length}</span>
+          <span class="quiz-score-badge">Score: ${quizScore}</span>
+        </div>
+        <h3 class="quiz-question-text">${currentQ.question}</h3>
+        
+        <div class="quiz-actions">
+          ${!hasAnswered ? `
+            <button class="quiz-reveal-btn" onclick="revealOpenEndedAnswer()">👁️ Reveal Answer</button>
+          ` : `
+            <div class="open-ended-answer-box">
+              <strong>Answer:</strong>
+              <p>${currentQ.answer}</p>
+            </div>
+            <div class="self-grade-buttons">
+              <p>Self-grade your answer:</p>
+              <button class="btn-grade-correct" onclick="gradeOpenEnded(true)">✅ Correct</button>
+              <button class="btn-grade-incorrect" onclick="gradeOpenEnded(false)">❌ Incorrect</button>
+            </div>
+          `}
+        </div>
+      </div>
+    `;
+  }
+};
+
+window.selectQuizOption = function(optionIndex) {
+  if (quizAnswersSelected[quizCurrentIndex] !== null) return;
+  
+  quizAnswersSelected[quizCurrentIndex] = optionIndex;
+  const isCorrect = optionIndex === quizQuestions[quizCurrentIndex].correctIndex;
+  if (isCorrect) {
+    quizScore++;
+  }
+  
+  renderQuiz();
+};
+
+window.nextQuizQuestion = function() {
+  quizCurrentIndex++;
+  renderQuiz();
+};
+
+window.restartQuiz = function() {
+  quizCurrentIndex = 0;
+  quizScore = 0;
+  quizAnswersSelected = new Array(quizQuestions.length).fill(null);
+  renderQuiz();
+};
+
+window.revealOpenEndedAnswer = function() {
+  quizAnswersSelected[quizCurrentIndex] = true;
+  renderQuiz();
+};
+
+window.gradeOpenEnded = function(isCorrect) {
+  if (isCorrect) {
+    quizScore++;
+  }
+  quizCurrentIndex++;
+  renderQuiz();
 };
 
 // Flashcard Carousel Actions
@@ -522,10 +836,20 @@ function startPolling(videoUri) {
         query GetVideoAssets($videoUri: String!) {
           getVideoAssets(videoUri: $videoUri) {
             videoUri
+            title
+            status
+            message
             summary
             qa
             flashcards
             keyTakeaways
+            translations
+            localized {
+              summary
+              qa
+              flashcards
+              keyTakeaways
+            }
             lessons {
               title
               module
@@ -537,6 +861,13 @@ function startPolling(videoUri) {
               qa
               flashcards
               keyTakeaways
+              translations
+              localized {
+                summary
+                qa
+                flashcards
+                keyTakeaways
+              }
             }
             createdAt
           }
@@ -544,18 +875,29 @@ function startPolling(videoUri) {
       `, { videoUri });
       
       const asset = data.getVideoAssets;
-      if (asset && asset.summary) {
-        clearInterval(intervalId);
-        pollingIntervals.delete(videoUri);
-        removeLocalProcessingVideo(videoUri);
-
+      if (asset) {
         const idx = videos.findIndex(v => v.videoUri === videoUri);
         if (idx !== -1) {
-          videos[idx] = {
-            ...asset,
-            status: "COMPLETED",
-            fileName: videoUri.split("/").pop(),
-          };
+          const isFinished = asset.summary || asset.status === "COMPLETED" || asset.status === "DRAFT" || asset.status === "PUBLISHED";
+          
+          if (isFinished) {
+            clearInterval(intervalId);
+            pollingIntervals.delete(videoUri);
+            removeLocalProcessingVideo(videoUri);
+            
+            videos[idx] = {
+              ...asset,
+              status: asset.status || "COMPLETED",
+              fileName: videoUri.split("/").pop(),
+              title: asset.title || videoUri.split("/").pop()
+            };
+          } else {
+            // Update intermediate progress state
+            videos[idx].status = asset.status || "PROCESSING";
+            videos[idx].message = asset.message || "";
+            videos[idx].title = asset.title || videos[idx].title;
+          }
+          
           renderVideoList();
           
           if (activeVideoUri === videoUri) {
@@ -776,3 +1118,120 @@ document.addEventListener("DOMContentLoaded", () => {
   setupDragAndDrop();
   loadLibrary();
 });
+
+// Localization helper to return translated strings if active language is not English
+function getLocalizedSource(source) {
+  if (activeLanguage === "en") {
+    return source;
+  }
+  const translations = source.translations || [];
+  const localized = source.localized || [];
+  const langIndex = translations.indexOf(activeLanguage);
+  
+  if (langIndex !== -1 && localized[langIndex]) {
+    const loc = localized[langIndex];
+    return {
+      ...source,
+      summary: loc.summary || source.summary,
+      qa: loc.qa || source.qa,
+      flashcards: loc.flashcards || source.flashcards,
+      keyTakeaways: loc.keyTakeaways || source.keyTakeaways
+    };
+  }
+  return source;
+}
+
+// Handler for language dropdown changes
+function changeLanguage(langCode) {
+  activeLanguage = langCode;
+  const video = videos.find(v => v.videoUri === activeVideoUri);
+  if (!video) return;
+
+  if (activeLessonIndex === null) {
+    renderLearningAssets(video);
+  } else {
+    const lesson = video.lessons[activeLessonIndex];
+    renderLearningAssets(lesson);
+  }
+}
+window.changeLanguage = changeLanguage;
+
+// Approve & Publish Course Draft Action
+async function approveCourseDraft(videoUri) {
+  const btnApprove = document.getElementById("btn-approve-video");
+  if (btnApprove) {
+    btnApprove.disabled = true;
+    btnApprove.innerHTML = "Publishing... 🚀";
+  }
+  try {
+    const data = await queryGraphQL(`
+      mutation ApproveVideo($requestId: String!, $approved: Boolean!, $message: String, $callbackId: String!) {
+        approveVideo(requestId: $requestId, approved: $approved, message: $message, callbackId: $callbackId)
+      }
+    `, {
+      requestId: videoUri,
+      approved: true,
+      message: "Approved and published by tutor",
+      callbackId: videoUri
+    });
+    
+    if (data && data.approveVideo) {
+      const idx = videos.findIndex(v => v.videoUri === videoUri);
+      if (idx !== -1) {
+        videos[idx].status = "PUBLISHED";
+      }
+      if (activeVideoUri === videoUri) {
+        selectVideo(videoUri);
+      }
+      alert("Syllabus draft has been approved and published!");
+    } else {
+      alert("Failed to approve video syllabus.");
+      if (btnApprove) {
+        btnApprove.disabled = false;
+        btnApprove.innerHTML = "Approve & Publish";
+      }
+    }
+  } catch (error) {
+    console.error("Failed to approve video syllabus:", error);
+    alert(`Failed to approve: ${error.message}`);
+    if (btnApprove) {
+      btnApprove.disabled = false;
+      btnApprove.innerHTML = "Approve & Publish";
+    }
+  }
+}
+window.approveCourseDraft = approveCourseDraft;
+
+// Render course header action buttons and dropdowns
+function renderHeaderActions(video) {
+  const container = document.getElementById("header-actions");
+  if (!container) return;
+
+  const isReady = video.status === "COMPLETED" || video.status === "DRAFT" || video.status === "PUBLISHED";
+  if (!isReady) {
+    container.innerHTML = "";
+    return;
+  }
+
+  let html = "";
+  if (video.status === "DRAFT") {
+    html += `
+      <button id="btn-approve-video" class="btn-approve" onclick="approveCourseDraft('${video.videoUri}')">
+        🚀 Approve & Publish
+      </button>
+    `;
+  }
+
+  html += `
+    <div class="language-selector-container">
+      <span class="lang-icon">🌐</span>
+      <select class="language-select" id="language-select" onchange="changeLanguage(this.value)">
+        <option value="en" ${activeLanguage === 'en' ? 'selected' : ''}>English</option>
+        <option value="fr" ${activeLanguage === 'fr' ? 'selected' : ''}>Français (French)</option>
+        <option value="es" ${activeLanguage === 'es' ? 'selected' : ''}>Español (Spanish)</option>
+      </select>
+    </div>
+  `;
+  container.innerHTML = html;
+}
+window.renderHeaderActions = renderHeaderActions;

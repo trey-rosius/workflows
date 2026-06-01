@@ -1,5 +1,5 @@
 {
-  "Comment": "This workflow uses amazon nova embeddings to convert a video to embeddings",
+  "Comment": "This workflow manages the Educloud course generation pipeline, transcribing, translating, segmenting syllabus, and generating learning assets.",
   "StartAt": "StartAsyncInvoke",
   "QueryLanguage": "JSONata",
   "States": {
@@ -17,7 +17,7 @@
               "embeddingMode": "AUDIO_VIDEO_COMBINED",
               "source": {
                 "s3Location": {
-                  "uri": "{% $states.input.mediaFileUri  %}"
+                  "uri": "{% $states.input.mediaFileUri %}"
                 }
               },
               "segmentationConfig": {
@@ -28,17 +28,17 @@
         },
         "OutputDataConfig": {
           "S3OutputDataConfig": {
-            "S3Uri": "{% $states.input.mediaBucket  %}"
+            "S3Uri": "{% $states.input.mediaBucket %}"
           }
         }
       },
       "Resource": "arn:aws:states:::aws-sdk:bedrockruntime:startAsyncInvoke",
       "Output": "{% $merge([$states.result, $states.input]) %}",
-      "Next": "Wait"
+      "Next": "WaitEmbeddings"
     },
-    "Wait": {
+    "WaitEmbeddings": {
       "Type": "Wait",
-      "Seconds": 30,
+      "Seconds": 15,
       "Next": "GetAsyncInvoke"
     },
     "GetAsyncInvoke": {
@@ -47,13 +47,13 @@
         "InvocationArn": "{% $states.input.InvocationArn %}"
       },
       "Resource": "arn:aws:states:::aws-sdk:bedrockruntime:getAsyncInvoke",
-      "Next": "Choice"
+      "Next": "ChoiceEmbeddings"
     },
-    "Choice": {
+    "ChoiceEmbeddings": {
       "Type": "Choice",
       "Choices": [
         {
-          "Next": "Lambda Invoke",
+          "Next": "SaveEmbeddings",
           "Condition": "{% $states.input.Status = \"Completed\" %}"
         },
         {
@@ -61,9 +61,9 @@
           "Condition": "{% $states.input.Status = \"Failed\" %}"
         }
       ],
-      "Default": "Wait"
+      "Default": "WaitEmbeddings"
     },
-    "Lambda Invoke": {
+    "SaveEmbeddings": {
       "Type": "Task",
       "Resource": "arn:aws:states:::lambda:invoke",
       "Output": "{% $states.result.Payload %}",
@@ -74,46 +74,168 @@
           "S3Uri": "{% $states.input.OutputDataConfig.S3OutputDataConfig.S3Uri %}"
         }
       },
-      "Retry": [
-        {
-          "ErrorEquals": [
-            "Lambda.ServiceException",
-            "Lambda.AWSLambdaException",
-            "Lambda.SdkClientException",
-            "Lambda.TooManyRequestsException"
-          ],
-          "IntervalSeconds": 1,
-          "MaxAttempts": 3,
-          "BackoffRate": 2,
-          "JitterStrategy": "FULL"
-        }
-      ],
-      "Next": "InvokeStrandsMultiAgent"
+      "Next": "StartTranscribe"
     },
-    "InvokeStrandsMultiAgent": {
+    "StartTranscribe": {
       "Type": "Task",
       "Resource": "arn:aws:states:::lambda:invoke",
       "Output": "{% $states.result.Payload %}",
       "Arguments": {
-        "FunctionName": "${MULTI_AGENT_FUNCTION_ARN}",
+        "FunctionName": "${TRANSCRIBE_FUNCTION_ARN}",
         "Payload": {
-          "mediaFileUri": "{% $states.context.Execution.Input.mediaFileUri %}"
+          "mediaFileUri": "{% $states.context.Execution.Input.mediaFileUri %}",
+          "action": "start"
         }
       },
-      "Retry": [
+      "Next": "WaitTranscribe"
+    },
+    "WaitTranscribe": {
+      "Type": "Wait",
+      "Seconds": 15,
+      "Next": "GetTranscribeStatus"
+    },
+    "GetTranscribeStatus": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Output": "{% $states.result.Payload %}",
+      "Arguments": {
+        "FunctionName": "${TRANSCRIBE_FUNCTION_ARN}",
+        "Payload": {
+          "mediaFileUri": "{% $states.context.Execution.Input.mediaFileUri %}",
+          "action": "status"
+        }
+      },
+      "Next": "ChoiceTranscribe"
+    },
+    "ChoiceTranscribe": {
+      "Type": "Choice",
+      "Choices": [
         {
-          "ErrorEquals": [
-            "Lambda.ServiceException",
-            "Lambda.AWSLambdaException",
-            "Lambda.SdkClientException",
-            "Lambda.TooManyRequestsException"
-          ],
-          "IntervalSeconds": 1,
-          "MaxAttempts": 3,
-          "BackoffRate": 2,
-          "JitterStrategy": "FULL"
+          "Next": "AutoTranslateTranscript",
+          "Condition": "{% $states.input.status = \"COMPLETED\" %}"
         }
       ],
+      "Default": "WaitTranscribe"
+    },
+    "AutoTranslateTranscript": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Output": "{% $states.result.Payload %}",
+      "Arguments": {
+        "FunctionName": "${TRANSLATE_FUNCTION_ARN}",
+        "Payload": {
+          "mediaFileUri": "{% $states.context.Execution.Input.mediaFileUri %}",
+          "transcriptFileUri": "{% $states.input.transcriptFileUri %}"
+        }
+      },
+      "Next": "SegmentSyllabus"
+    },
+    "SegmentSyllabus": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Output": "{% $states.result.Payload %}",
+      "Arguments": {
+        "FunctionName": "${SEGMENT_SYLLABUS_FUNCTION_ARN}",
+        "Payload": {
+          "mediaFileUri": "{% $states.context.Execution.Input.mediaFileUri %}",
+          "transcribeData": "{% $states.input.transcribeData %}",
+          "transcriptText": "{% $states.input.transcriptText %}",
+          "translatedTranscripts": "{% $states.input.translatedTranscripts %}"
+        }
+      },
+      "Next": "ParallelGen"
+    },
+    "ParallelGen": {
+      "Type": "Parallel",
+      "Next": "SaveDraft",
+      "Output": "{% $states.result %}",
+      "Branches": [
+        {
+          "StartAt": "GenerateGlobalAssets",
+          "States": {
+            "GenerateGlobalAssets": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::lambda:invoke",
+              "Output": "{% $states.result.Payload %}",
+              "Arguments": {
+                "FunctionName": "${GENERATE_ASSETS_FUNCTION_ARN}",
+                "Payload": {
+                  "mediaFileUri": "{% $states.input.mediaFileUri %}",
+                  "transcribeData": "{% $states.input.transcribeData %}"
+                }
+              },
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "ProcessLessonsMap",
+          "States": {
+            "ProcessLessonsMap": {
+              "Type": "Map",
+              "Items": "{% $states.input.lessons %}",
+              "ItemSelector": {
+                "lesson": "{% $states.context.Map.Item.Value %}",
+                "index": "{% $states.context.Map.Item.Index %}",
+                "mediaFileUri": "{% $states.input.mediaFileUri %}",
+                "transcribeData": "{% $states.input.transcribeData %}"
+              },
+              "ItemProcessor": {
+                "ProcessorConfig": {
+                  "Mode": "INLINE"
+                },
+                "StartAt": "SliceSegment",
+                "States": {
+                  "SliceSegment": {
+                    "Type": "Task",
+                    "Resource": "arn:aws:states:::lambda:invoke",
+                    "Output": "{% $states.result.Payload %}",
+                    "Arguments": {
+                      "FunctionName": "${SLICE_SEGMENT_FUNCTION_ARN}",
+                      "Payload": {
+                        "mediaFileUri": "{% $states.input.mediaFileUri %}",
+                        "lesson": "{% $states.input.lesson %}",
+                        "index": "{% $states.input.index %}"
+                      }
+                    },
+                    "Next": "GenerateLessonAssets"
+                  },
+                  "GenerateLessonAssets": {
+                    "Type": "Task",
+                    "Resource": "arn:aws:states:::lambda:invoke",
+                    "Output": "{% $states.result.Payload %}",
+                    "Arguments": {
+                      "FunctionName": "${GENERATE_ASSETS_FUNCTION_ARN}",
+                      "Payload": {
+                        "mediaFileUri": "{% $states.input.mediaFileUri %}",
+                        "transcribeData": "{% $states.input.transcribeData %}",
+                        "lesson": "{% $states.input.lesson %}"
+                      }
+                    },
+                    "End": true
+                  }
+                }
+              },
+              "End": true
+            }
+          }
+        }
+      ]
+    },
+    "SaveDraft": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Output": "{% $states.result.Payload %}",
+      "Arguments": {
+        "FunctionName": "${SAVE_DRAFT_FUNCTION_ARN}",
+        "Payload": {
+          "mediaFileUri": "{% $states.context.Execution.Input.mediaFileUri %}",
+          "title": "{% $states.input[0].title %}",
+          "description": "{% $states.input[0].description %}",
+          "global_assets": "{% $states.input[0] %}",
+          "lessons": "{% $states.input[1] %}"
+        }
+      },
       "Next": "Success"
     },
     "Fail": {

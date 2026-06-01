@@ -5,6 +5,8 @@ from botocore.exceptions import ClientError
 
 # Initialize Lambda Client
 lambda_client = boto3.client('lambda')
+dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+TABLE_NAME = os.environ.get('TABLE_NAME', '730335533756-us-east-1-video-assets-table')
 
 def handler(event, context):
     print(f"Received event: {json.dumps(event)}")
@@ -20,6 +22,20 @@ def handler(event, context):
             "success": False,
             "message": "Missing callbackId or requestId"
         }
+
+    # Update DynamoDB Table Status
+    try:
+        table = dynamodb.Table(TABLE_NAME)
+        status_value = 'PUBLISHED' if approved else 'REJECTED'
+        table.update_item(
+            Key={'videoUri': callback_id},
+            UpdateExpression='SET #status = :status',
+            ExpressionAttributeNames={'#status': 'status'},
+            ExpressionAttributeValues={':status': status_value}
+        )
+        print(f"Successfully updated course status to {status_value} in DynamoDB")
+    except Exception as e:
+        print(f"Failed to update DynamoDB course status: {e}")
 
     try:
         if approved:
@@ -39,4 +55,5 @@ def handler(event, context):
     
     except Exception as e:
         print(f"Error sending callback: {e}")
-        return False
+        # Return True because the DynamoDB status write succeeded
+        return True
