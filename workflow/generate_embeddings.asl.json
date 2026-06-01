@@ -1,0 +1,126 @@
+{
+  "Comment": "This workflow uses amazon nova embeddings to convert a video to embeddings",
+  "StartAt": "StartAsyncInvoke",
+  "QueryLanguage": "JSONata",
+  "States": {
+    "StartAsyncInvoke": {
+      "Type": "Task",
+      "Arguments": {
+        "ModelId": "amazon.nova-2-multimodal-embeddings-v1:0",
+        "ModelInput": {
+          "taskType": "SEGMENTED_EMBEDDING",
+          "segmentedEmbeddingParams": {
+            "embeddingDimension": 1024,
+            "embeddingPurpose": "GENERIC_INDEX",
+            "video": {
+              "format": "mp4",
+              "embeddingMode": "AUDIO_VIDEO_COMBINED",
+              "source": {
+                "s3Location": {
+                  "uri": "{% $states.input.mediaFileUri  %}"
+                }
+              },
+              "segmentationConfig": {
+                "durationSeconds": 5
+              }
+            }
+          }
+        },
+        "OutputDataConfig": {
+          "S3OutputDataConfig": {
+            "S3Uri": "{% $states.input.mediaBucket  %}"
+          }
+        }
+      },
+      "Resource": "arn:aws:states:::aws-sdk:bedrockruntime:startAsyncInvoke",
+      "Output": "{% $merge([$states.result, $states.input]) %}",
+      "Next": "Wait"
+    },
+    "Wait": {
+      "Type": "Wait",
+      "Seconds": 30,
+      "Next": "GetAsyncInvoke"
+    },
+    "GetAsyncInvoke": {
+      "Type": "Task",
+      "Arguments": {
+        "InvocationArn": "{% $states.input.InvocationArn %}"
+      },
+      "Resource": "arn:aws:states:::aws-sdk:bedrockruntime:getAsyncInvoke",
+      "Next": "Choice"
+    },
+    "Choice": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Next": "Lambda Invoke",
+          "Condition": "{% $states.input.Status = \"Completed\" %}"
+        },
+        {
+          "Next": "Fail",
+          "Condition": "{% $states.input.Status = \"Failed\" %}"
+        }
+      ],
+      "Default": "Wait"
+    },
+    "Lambda Invoke": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Output": "{% $states.result.Payload %}",
+      "Arguments": {
+        "FunctionName": "${FUNCTION_ARN}",
+        "Payload": {
+          "mediaFileUri": "{% $states.context.Execution.Input.mediaFileUri %}",
+          "S3Uri": "{% $states.input.OutputDataConfig.S3OutputDataConfig.S3Uri %}"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2,
+          "JitterStrategy": "FULL"
+        }
+      ],
+      "Next": "InvokeStrandsMultiAgent"
+    },
+    "InvokeStrandsMultiAgent": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Output": "{% $states.result.Payload %}",
+      "Arguments": {
+        "FunctionName": "${MULTI_AGENT_FUNCTION_ARN}",
+        "Payload": {
+          "mediaFileUri": "{% $states.context.Execution.Input.mediaFileUri %}"
+        }
+      },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2,
+          "JitterStrategy": "FULL"
+        }
+      ],
+      "Next": "Success"
+    },
+    "Fail": {
+      "Type": "Fail"
+    },
+    "Success": {
+      "Type": "Succeed"
+    }
+  }
+}

@@ -1,0 +1,94 @@
+type VideoStatus @aws_iam @aws_api_key @aws_cognito_user_pools {
+  requestId: String!
+  status: String!
+  message: String
+  callbackId: String
+  videoUrl: String
+}
+
+type Lesson @aws_api_key @aws_cognito_user_pools {
+  title: String!
+  module: String!
+  description: String
+  startTime: Float!
+  endTime: Float!
+  videoUri: String!
+  summary: String
+  qa: String
+  flashcards: String
+  keyTakeaways: String
+}
+
+type VideoAssets @aws_api_key @aws_cognito_user_pools {
+  videoUri: String!
+  summary: String
+  qa: String
+  flashcards: String
+  lessons: [Lesson]
+  createdAt: String
+  keyTakeaways: String
+}
+type UploadUrl @aws_api_key @aws_cognito_user_pools {
+  url: String!
+  fileName: String!
+}
+
+type InitiateMultipartResult @aws_api_key @aws_cognito_user_pools {
+  uploadId: String!
+  key: String!
+}
+
+type MultipartPartUrl @aws_api_key @aws_cognito_user_pools {
+  partNumber: Int!
+  url: String!
+}
+
+input CompletedPartInput {
+  partNumber: Int!
+  eTag: String!
+}
+
+type Mutation {
+  approveVideo(
+    requestId: String!
+    approved: Boolean!
+    message: String
+    callbackId: String!
+  ): Boolean! @aws_api_key @aws_cognito_user_pools
+
+  getUploadUrl(fileName: String!, contentType: String!): UploadUrl! @aws_api_key @aws_cognito_user_pools
+
+  initiateMultipartUpload(fileName: String!, contentType: String!): InitiateMultipartResult! @aws_api_key @aws_cognito_user_pools
+
+  getMultipartUploadPartUrls(uploadId: String!, key: String!, partCount: Int!): [MultipartPartUrl]! @aws_api_key @aws_cognito_user_pools
+
+  completeMultipartUpload(uploadId: String!, key: String!, parts: [CompletedPartInput]!): Boolean! @aws_api_key @aws_cognito_user_pools
+
+  search(text: String!): Boolean @aws_api_key @aws_cognito_user_pools
+  updateVideoStatus(
+    requestId: String!
+    status: String!
+    message: String
+    callbackId: String
+    videoUrl: String
+  ): VideoStatus @aws_iam @aws_api_key @aws_cognito_user_pools
+}
+
+type Query {
+  dummy: String @aws_api_key @aws_cognito_user_pools
+  getVideoAssets(videoUri: String!): VideoAssets @aws_api_key @aws_cognito_user_pools
+  getVideoUrl(videoUri: String!): String @aws_api_key @aws_cognito_user_pools
+  listVideoAssets: [VideoAssets] @aws_api_key @aws_cognito_user_pools
+}
+
+type Subscription {
+  onVideoStatusUpdate: VideoStatus
+    @aws_subscribe(mutations: ["updateVideoStatus"])
+    @aws_api_key @aws_cognito_user_pools
+}
+
+schema {
+  query: Query
+  mutation: Mutation
+  subscription: Subscription
+}

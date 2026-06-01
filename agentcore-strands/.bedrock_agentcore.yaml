@@ -1,0 +1,122 @@
+default_agent: app
+agents:
+  strands_agent:
+    name: strands_agent
+    language: python
+    node_version: '20'
+    entrypoint: app.py
+    deployment_type: container
+    runtime_type: null
+    platform: linux/arm64
+    container_runtime: docker
+    source_path: /Users/ro/Documents/playground/educloud-workflow/agentcore-strands
+    aws:
+      execution_role: null
+      execution_role_auto_create: true
+      account: '730335533756'
+      region: us-east-1
+      ecr_repository: null
+      ecr_auto_create: false
+      s3_path: null
+      s3_auto_create: false
+      network_configuration:
+        network_mode: PUBLIC
+        network_mode_config: null
+      protocol_configuration:
+        server_protocol: HTTP
+      observability:
+        enabled: true
+      lifecycle_configuration:
+        idle_runtime_session_timeout: null
+        max_lifetime: null
+    bedrock_agentcore:
+      agent_id: null
+      agent_arn: null
+      agent_session_id: null
+    codebuild:
+      project_name: null
+      execution_role: null
+      source_bucket: null
+    memory:
+      mode: STM_ONLY
+      memory_id: strands_agent_mem-9l0ZhSCgGB
+      memory_arn: arn:aws:bedrock-agentcore:us-east-1:730335533756:memory/strands_agent_mem-9l0ZhSCgGB
+      memory_name: strands_agent_mem
+      event_expiry_days: 30
+      first_invoke_memory_check_done: true
+      was_created_by_toolkit: true
+    identity:
+      credential_providers: []
+      workload: null
+    aws_jwt:
+      enabled: false
+      audiences: []
+      signing_algorithm: ES384
+      issuer_url: null
+      duration_seconds: 300
+    authorizer_configuration: null
+    request_header_configuration: null
+    oauth_configuration: null
+    api_key_env_var_name: null
+    api_key_credential_provider_name: null
+    is_generated_by_agentcore_create: false
+  app:
+    name: app
+    language: python
+    node_version: '20'
+    entrypoint: /Users/ro/Documents/playground/educloud-workflow/agentcore-strands/app.py
+    deployment_type: container
+    runtime_type: null
+    platform: linux/arm64
+    container_runtime: docker
+    source_path: /Users/ro/Documents/playground/educloud-workflow/agentcore-strands
+    aws:
+      execution_role: arn:aws:iam::730335533756:role/AmazonBedrockAgentCoreSDKRuntime-us-east-1-a172cedcae
+      execution_role_auto_create: false
+      account: '730335533756'
+      region: us-east-1
+      ecr_repository: 730335533756.dkr.ecr.us-east-1.amazonaws.com/strands_agent
+      ecr_auto_create: false
+      s3_path: null
+      s3_auto_create: false
+      network_configuration:
+        network_mode: PUBLIC
+        network_mode_config: null
+      protocol_configuration:
+        server_protocol: HTTP
+      observability:
+        enabled: true
+      lifecycle_configuration:
+        idle_runtime_session_timeout: null
+        max_lifetime: null
+    bedrock_agentcore:
+      agent_id: app-sGZ38b5GyY
+      agent_arn: arn:aws:bedrock-agentcore:us-east-1:730335533756:runtime/app-sGZ38b5GyY
+      agent_session_id: null
+    codebuild:
+      project_name: bedrock-agentcore-app-builder
+      execution_role: arn:aws:iam::730335533756:role/AmazonBedrockAgentCoreSDKCodeBuild-us-east-1-a172cedcae
+      source_bucket: bedrock-agentcore-codebuild-sources-730335533756-us-east-1
+    memory:
+      mode: STM_ONLY
+      memory_id: app_mem-po833k86Qg
+      memory_arn: arn:aws:bedrock-agentcore:us-east-1:730335533756:memory/app_mem-po833k86Qg
+      memory_name: app_mem
+      event_expiry_days: 30
+      first_invoke_memory_check_done: true
+      was_created_by_toolkit: true
+    identity:
+      credential_providers: []
+      workload: null
+    aws_jwt:
+      enabled: false
+      audiences: []
+      signing_algorithm: ES384
+      issuer_url: null
+      duration_seconds: 300
+    authorizer_configuration: null
+    request_header_configuration: null
+    oauth_configuration: null
+    api_key_env_var_name: null
+    api_key_credential_provider_name: null
+    is_generated_by_agentcore_create: false

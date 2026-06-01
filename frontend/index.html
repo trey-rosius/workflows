@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EduCloud Learning Portal - Video AI Analysis</title>
+  <meta name="description" content="EduCloud Learning Portal allows users to upload instructional videos, generate rich educational summaries, high-quality question-answer sets, and interactive 3D study flashcards automatically using Bedrock Nova and Strands AI agents.">
+  
+  <!-- Modern Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- CSS Styling -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  
+  <div class="app-container">
+    <!-- Sidebar: Upload Zone & Historical Files -->
+    <aside class="sidebar">
+      <header class="sidebar-header">
+        <div class="logo">
+          <div class="logo-icon">✨</div>
+          <span class="logo-text">EduCloud AI</span>
+        </div>
+        <p class="subtitle">Video Learning Assistant</p>
+      </header>
+
+      <!-- Drag & Drop Upload Zone -->
+      <section class="upload-section">
+        <div id="dropzone" class="dropzone">
+          <input type="file" id="file-input" accept="video/mp4,video/quicktime,video/webm" style="display: none;">
+          <div class="dropzone-content">
+            <span class="upload-icon">📤</span>
+            <p class="dropzone-text">Drag & drop video here or <span class="highlight">browse</span></p>
+            <p class="dropzone-hint">Supports MP4, MOV, WEBM (Max 500MB)</p>
+          </div>
+        </div>
+
+        <!-- Active Upload Progress -->
+        <div id="upload-progress-container" class="upload-progress-container hidden">
+          <div class="progress-details">
+            <span id="upload-file-name">filename.mp4</span>
+            <span id="upload-percentage">0%</span>
+          </div>
+          <div class="progress-bar-bg">
+            <div id="upload-progress-bar" class="progress-bar-fill" style="width: 0%;"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Video History Section -->
+      <section class="history-section">
+        <h2 class="section-title">Your Videos <span id="video-count-badge" class="badge">0</span></h2>
+        
+        <!-- Refresh Button -->
+        <button id="btn-refresh" class="btn-icon-text">
+          <span>🔄</span> Refresh Library
+        </button>
+
+        <div id="video-list" class="video-list">
+          <!-- Dynamically populated files -->
+          <div class="loading-spinner-small">Loading videos...</div>
+        </div>
+      </section>
+    </aside>
+
+    <!-- Main Workspace: Video Player & Generated Insights -->
+    <main class="main-content">
+      <!-- Welcome Screen (Default) -->
+      <section id="welcome-screen" class="welcome-screen">
+        <div class="welcome-card">
+          <div class="welcome-hero">📚</div>
+          <h1>Welcome to EduCloud AI</h1>
+          <p>Analyze educational videos instantly. Extract rich structured summaries, generate recall assessment questions, and study with interactive 3D flashcards powered by Strands Agents and Bedrock Nova Pro.</p>
+          <div class="welcome-actions">
+            <button id="btn-welcome-browse" class="btn-primary">Browse Video File</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Workspace Dashboard (Active Video Selected) -->
+      <section id="workspace" class="workspace hidden">
+        <header class="workspace-header">
+          <div class="title-area">
+            <h1 id="active-video-title">luxehome_voice.mp4</h1>
+            <span id="active-video-status" class="status-badge status-completed">Completed</span>
+          </div>
+        </header>
+
+        <div class="workspace-grid">
+          <!-- Video Player Column -->
+          <div class="video-column">
+            <div class="player-container">
+              <video id="video-player" controls preload="metadata">
+                Your browser does not support the video tag.
+              </video>
+            </div>
+            
+            <div id="processing-banner" class="processing-banner hidden">
+              <div class="pulse-ring"></div>
+              <div class="banner-text">
+                <h3>AI Processing in Progress...</h3>
+                <p>Generating embeddings and running Strands cognitive agents (Summarizer, QA, Flashcards). This will update automatically in a few moments.</p>
+              </div>
+            </div>
+
+            <!-- Course Syllabus Panel -->
+            <section class="syllabus-panel" id="syllabus-panel">
+              <h2 class="syllabus-title">🎓 Course Syllabus</h2>
+              <div id="syllabus-content" class="syllabus-content">
+                <!-- Dynamically populated lessons list -->
+                <p class="text-muted">No modules detected yet.</p>
+              </div>
+            </section>
+          </div>
+
+          <!-- Insights Tabbed Column -->
+          <div class="insights-column">
+            <nav class="tabs-nav" aria-label="Learning Assets Tabs">
+              <button id="tab-summary" class="tab-button active" onclick="switchTab('summary')">📝 Summary</button>
+              <button id="tab-takeaways" class="tab-button" onclick="switchTab('takeaways')">💡 Key Takeaways</button>
+              <button id="tab-qa" class="tab-button" onclick="switchTab('qa')">❓ Q&A Quiz</button>
+              <button id="tab-flashcards" class="tab-button" onclick="switchTab('flashcards')">🎴 Flashcards</button>
+            </nav>
+
+            <!-- Tabs Content Containers -->
+            <div class="tab-contents">
+              
+              <!-- Tab 1: Summary -->
+              <article id="content-summary" class="tab-pane active">
+                <div class="markdown-body" id="summary-text">
+                  <!-- Generated summary will be output here -->
+                </div>
+              </article>
+
+              <!-- Tab 4: Key Takeaways -->
+              <article id="content-takeaways" class="tab-pane">
+                <div class="markdown-body" id="takeaways-text">
+                  <!-- Generated Key Takeaways will be output here -->
+                </div>
+              </article>
+
+              <!-- Tab 2: QA List -->
+              <article id="content-qa" class="tab-pane">
+                <div class="qa-container" id="qa-list">
+                  <!-- Generated Q&A accordion will be output here -->
+                </div>
+              </article>
+
+              <!-- Tab 3: Flashcards -->
+              <article id="content-flashcards" class="tab-pane">
+                <div class="flashcards-deck-container">
+                  <!-- The 3D Flashcard Deck -->
+                  <div class="flashcard-slider">
+                    <div id="flashcard-deck" class="flashcard-deck">
+                      <!-- Dynamically generated 3D flip card -->
+                      <div class="flashcard-container" id="current-flashcard">
+                        <div class="flashcard-inner" onclick="flipCard()">
+                          <div class="flashcard-front">
+                            <span class="card-side-label">QUESTION</span>
+                            <div class="card-text" id="card-front-text">Front Text</div>
+                            <span class="click-hint">Click card to reveal answer</span>
+                          </div>
+                          <div class="flashcard-back">
+                            <span class="card-side-label">ANSWER</span>
+                            <div class="card-text" id="card-back-text">Back Text</div>
+                            <span class="click-hint">Click card to view question</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Flashcard Controls -->
+                  <footer class="flashcard-controls">
+                    <button id="btn-prev-card" class="btn-secondary" onclick="prevCard()">◀ Prev</button>
+                    <span id="card-counter" class="card-counter">1 / 5</span>
+                    <button id="btn-next-card" class="btn-secondary" onclick="nextCard()">Next ▶</button>
+                  </footer>
+                </div>
+              </article>
+
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- JavaScript App Logic -->
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

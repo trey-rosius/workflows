@@ -6,3 +6,10 @@ node_modules
 # CDK asset staging directory
 .cdk.staging
 cdk.out
+
+# Media and large files
+*.mp4
+.DS_Store
+*.json.log
+response.json
+
