@@ -1,5 +1,9 @@
 *.js
 !jest.config.js
+!frontend/**/*.js
+!frontend/*.js
+!resolvers/**/*.js
+!resolvers/*.js
 *.d.ts
 node_modules
 
@@ -12,4 +16,5 @@ cdk.out
 .DS_Store
 *.json.log
 response.json
+
 
