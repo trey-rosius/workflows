@@ -333,7 +333,6 @@ export class AppSyncConstruct extends Construct {
       ),
       definitionSubstitutions: {
         FUNCTION_ARN: this.saveEmbeddingsFunction.functionArn,
-        TRANSCRIBE_FUNCTION_ARN: transcribeFunction.functionArn,
         TRANSLATE_FUNCTION_ARN: translateFunction.functionArn,
         SEGMENT_SYLLABUS_FUNCTION_ARN: segmentSyllabusFunction.functionArn,
         SLICE_SEGMENT_FUNCTION_ARN: sliceSegmentFunction.functionArn,
@@ -358,7 +357,6 @@ export class AppSyncConstruct extends Construct {
         actions: ["lambda:InvokeFunction"],
         resources: [
           this.saveEmbeddingsFunction.functionArn,
-          transcribeFunction.functionArn,
           translateFunction.functionArn,
           segmentSyllabusFunction.functionArn,
           sliceSegmentFunction.functionArn,
@@ -375,6 +373,26 @@ export class AppSyncConstruct extends Construct {
         effect: iam.Effect.ALLOW,
       })
     );
+
+    stateMachineRole.addToPolicy(
+      new iam.PolicyStatement({
+        actions: [
+          "transcribe:StartTranscriptionJob",
+          "transcribe:GetTranscriptionJob"
+        ],
+        resources: ["*"],
+        effect: iam.Effect.ALLOW,
+      })
+    );
+
+    stateMachineRole.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ["events:PutEvents"],
+        resources: [`arn:aws:events:${cdk.Stack.of(this).region}:${cdk.Stack.of(this).account}:event-bus/VideoAgentEventBus`],
+        effect: iam.Effect.ALLOW,
+      })
+    );
+
 
     this.invokeWorkflowFunction = new NodejsFunction(this, "invokeWorkflowFunction", {
       entry: path.join(__dirname, "../src/ts/invokeWorkflowFunction.ts"),

@@ -66,7 +66,7 @@
     "SaveEmbeddings": {
       "Type": "Task",
       "Resource": "arn:aws:states:::lambda:invoke",
-      "Output": "{% $states.result.Payload %}",
+      "Output": "{% $states.input %}",
       "Arguments": {
         "FunctionName": "${FUNCTION_ARN}",
         "Payload": {
@@ -87,30 +87,54 @@
           "BackoffRate": 2
         }
       ],
-      "Next": "StartTranscribe"
+      "Next": "PublishTranscribingEvent"
     },
-    "StartTranscribe": {
+    "PublishTranscribingEvent": {
       "Type": "Task",
-      "Resource": "arn:aws:states:::lambda:invoke",
-      "Output": "{% $states.result.Payload %}",
+      "Resource": "arn:aws:states:::aws-sdk:eventbridge:putEvents",
       "Arguments": {
-        "FunctionName": "${TRANSCRIBE_FUNCTION_ARN}",
-        "Payload": {
-          "mediaFileUri": "{% $states.context.Execution.Input.mediaFileUri %}",
-          "action": "start"
-        }
+        "Entries": [
+          {
+            "Source": "video.pipeline",
+            "DetailType": "video.processing.status",
+            "Detail": "{% $string({ 'requestId': $states.context.Execution.Input.mediaFileUri, 'status': 'TRANSCRIBING', 'message': 'Extracting audio and starting transcription...', 'videoUrl': $states.context.Execution.Input.mediaFileUri }) %}",
+            "EventBusName": "VideoAgentEventBus"
+          }
+        ]
       },
+      "Output": "{% $states.context.Execution.Input %}",
+      "Next": "StartTranscribeDirect"
+    },
+    "StartTranscribeDirect": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:transcribe:startTranscriptionJob",
+      "Arguments": {
+        "TranscriptionJobName": "{% 'educloud-transcribe-' & $states.context.Execution.Name %}",
+        "Media": {
+          "MediaFileUri": "{% $states.context.Execution.Input.mediaFileUri %}"
+        },
+        "MediaFormat": "{% $split($states.context.Execution.Input.mediaFileUri, '.')[-1] %}",
+        "LanguageCode": "en-US"
+      },
+      "Output": "{% $merge([$states.context.Execution.Input, { 'transcribeJobName': 'educloud-transcribe-' & $states.context.Execution.Name }]) %}",
       "Retry": [
         {
           "ErrorEquals": [
-            "Lambda.ServiceException",
-            "Lambda.AWSLambdaException",
-            "Lambda.SdkClientException",
-            "Lambda.TooManyRequestsException"
+            "Transcribe.LimitExceededException"
           ],
-          "IntervalSeconds": 2,
-          "MaxAttempts": 6,
+          "IntervalSeconds": 5,
+          "MaxAttempts": 3,
           "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "Transcribe.ConflictException",
+            "ConflictException"
+          ],
+          "Output": "{% $merge([$states.context.Execution.Input, { 'transcribeJobName': 'educloud-transcribe-' & $states.context.Execution.Name }]) %}",
+          "Next": "GetTranscribeStatusDirect"
         }
       ],
       "Next": "WaitTranscribe"
@@ -118,29 +142,22 @@
     "WaitTranscribe": {
       "Type": "Wait",
       "Seconds": 15,
-      "Next": "GetTranscribeStatus"
+      "Next": "GetTranscribeStatusDirect"
     },
-    "GetTranscribeStatus": {
+    "GetTranscribeStatusDirect": {
       "Type": "Task",
-      "Resource": "arn:aws:states:::lambda:invoke",
-      "Output": "{% $states.result.Payload %}",
+      "Resource": "arn:aws:states:::aws-sdk:transcribe:getTranscriptionJob",
       "Arguments": {
-        "FunctionName": "${TRANSCRIBE_FUNCTION_ARN}",
-        "Payload": {
-          "mediaFileUri": "{% $states.context.Execution.Input.mediaFileUri %}",
-          "action": "status"
-        }
+        "TranscriptionJobName": "{% $states.input.transcribeJobName %}"
       },
+      "Output": "{% $merge([$states.input, { 'status': $states.result.TranscriptionJob.TranscriptionJobStatus, 'transcriptFileUri': $states.result.TranscriptionJob.Transcript.TranscriptFileUri }]) %}",
       "Retry": [
         {
           "ErrorEquals": [
-            "Lambda.ServiceException",
-            "Lambda.AWSLambdaException",
-            "Lambda.SdkClientException",
-            "Lambda.TooManyRequestsException"
+            "Transcribe.BadRequestException"
           ],
           "IntervalSeconds": 2,
-          "MaxAttempts": 6,
+          "MaxAttempts": 3,
           "BackoffRate": 2
         }
       ],
@@ -150,11 +167,46 @@
       "Type": "Choice",
       "Choices": [
         {
-          "Next": "AutoTranslateTranscript",
+          "Next": "PublishTranscribeCompleteEvent",
           "Condition": "{% $states.input.status = \"COMPLETED\" %}"
+        },
+        {
+          "Next": "PublishTranscribeFailedEvent",
+          "Condition": "{% $states.input.status = \"FAILED\" %}"
         }
       ],
       "Default": "WaitTranscribe"
+    },
+    "PublishTranscribeFailedEvent": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:eventbridge:putEvents",
+      "Arguments": {
+        "Entries": [
+          {
+            "Source": "video.pipeline",
+            "DetailType": "video.processing.status",
+            "Detail": "{% $string({ 'requestId': $states.context.Execution.Input.mediaFileUri, 'status': 'FAILED', 'message': 'Transcription failed.', 'videoUrl': $states.context.Execution.Input.mediaFileUri }) %}",
+            "EventBusName": "VideoAgentEventBus"
+          }
+        ]
+      },
+      "Next": "Fail"
+    },
+    "PublishTranscribeCompleteEvent": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::aws-sdk:eventbridge:putEvents",
+      "Arguments": {
+        "Entries": [
+          {
+            "Source": "video.pipeline",
+            "DetailType": "video.processing.status",
+            "Detail": "{% $string({ 'requestId': $states.context.Execution.Input.mediaFileUri, 'status': 'TRANSCRIBING', 'message': 'Transcription completed successfully.', 'videoUrl': $states.context.Execution.Input.mediaFileUri }) %}",
+            "EventBusName": "VideoAgentEventBus"
+          }
+        ]
+      },
+      "Output": "{% $states.input %}",
+      "Next": "AutoTranslateTranscript"
     },
     "AutoTranslateTranscript": {
       "Type": "Task",
