@@ -23,7 +23,7 @@ def safe_translate(text: str, target_lang: str) -> str:
         for chunk in chunks:
             response = translate_client.translate_text(
                 Text=chunk,
-                SourceLanguageCode='auto',
+                SourceLanguageCode='en',
                 TargetLanguageCode=target_lang
             )
             translated_chunks.append(response['TranslatedText'])
@@ -134,10 +134,22 @@ def handler(event, context):
     
     video_uri = event.get('mediaFileUri')
     transcribe_data = event.get('transcribeData')
+    transcript_file_uri = event.get('transcriptFileUri')
     lesson = event.get('lesson')
     
+    if not transcribe_data and transcript_file_uri:
+        logger.info(f"Fetching transcript JSON from S3: {transcript_file_uri}")
+        try:
+            import urllib.request
+            req = urllib.request.Request(transcript_file_uri)
+            with urllib.request.urlopen(req) as response:
+                transcribe_data = json.loads(response.read().decode('utf-8'))
+        except Exception as e:
+            logger.error(f"Failed to fetch transcript file: {e}")
+            raise e
+            
     if not transcribe_data:
-        raise ValueError("Missing transcribeData in payload")
+        raise ValueError("Missing transcribeData or transcriptFileUri in payload")
         
     start_time = 0.0
     end_time = 0.0

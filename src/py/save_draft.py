@@ -72,7 +72,7 @@ def handler(event, context):
     try:
         table.put_item(Item=course_item)
         logger.info(f"Successfully saved draft syllabus for videoUri {video_uri} to DynamoDB!")
-        publish_status(video_uri, "DRAFT_READY", "Course syllabus draft generated and ready for tutor review.", videoUrl=video_uri)
+        publish_status(video_uri, "DRAFT_READY", "Course syllabus draft generated and ready for tutor review.", video_url=video_uri)
         return {
             "statusCode": 200,
             "videoUri": video_uri,

@@ -23,7 +23,7 @@ def chunk_and_translate(text: str, target_lang: str) -> str:
         try:
             response = translate_client.translate_text(
                 Text=chunk,
-                SourceLanguageCode='auto',
+                SourceLanguageCode='en',
                 TargetLanguageCode=target_lang
             )
             translated_chunks.append(response['TranslatedText'])
@@ -80,7 +80,6 @@ def handler(event, context):
     return {
         "mediaFileUri": video_uri,
         "transcriptFileUri": transcript_file_uri,
-        "transcribeData": transcribe_data, # Pass along transcribed data to avoid re-fetching
         "transcriptText": transcript_text,
         "translatedTranscripts": translated_transcripts
     }

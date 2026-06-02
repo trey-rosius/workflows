@@ -99,9 +99,21 @@ def handler(event, context):
     
     video_uri = event.get('mediaFileUri')
     transcribe_data = event.get('transcribeData')
+    transcript_file_uri = event.get('transcriptFileUri')
     
+    if not transcribe_data and transcript_file_uri:
+        logger.info(f"Fetching transcript JSON from S3: {transcript_file_uri}")
+        try:
+            import urllib.request
+            req = urllib.request.Request(transcript_file_uri)
+            with urllib.request.urlopen(req) as response:
+                transcribe_data = json.loads(response.read().decode('utf-8'))
+        except Exception as e:
+            logger.error(f"Failed to fetch transcript file: {e}")
+            raise e
+            
     if not transcribe_data:
-        raise ValueError("Missing transcribeData in payload")
+        raise ValueError("Missing transcribeData or transcriptFileUri in payload")
         
     publish_status(video_uri, "SEGMENTING", "Analyzing transcript content and segmenting syllabus...")
     update_progress(video_uri, "SEGMENTING", "Analyzing transcript content and segmenting syllabus...")
@@ -174,7 +186,7 @@ Here is the transcript:
             "lessons": lessons,
             "transcriptText": event.get("transcriptText"),
             "translatedTranscripts": event.get("translatedTranscripts"),
-            "transcribeData": transcribe_data
+            "transcriptFileUri": transcript_file_uri
         }
     except Exception as e:
         logger.error(f"Failed to segment syllabus: {e}")

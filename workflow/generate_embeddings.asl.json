@@ -74,6 +74,19 @@
           "S3Uri": "{% $states.input.OutputDataConfig.S3OutputDataConfig.S3Uri %}"
         }
       },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 6,
+          "BackoffRate": 2
+        }
+      ],
       "Next": "StartTranscribe"
     },
     "StartTranscribe": {
@@ -87,6 +100,19 @@
           "action": "start"
         }
       },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 6,
+          "BackoffRate": 2
+        }
+      ],
       "Next": "WaitTranscribe"
     },
     "WaitTranscribe": {
@@ -105,6 +131,19 @@
           "action": "status"
         }
       },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 6,
+          "BackoffRate": 2
+        }
+      ],
       "Next": "ChoiceTranscribe"
     },
     "ChoiceTranscribe": {
@@ -128,6 +167,19 @@
           "transcriptFileUri": "{% $states.input.transcriptFileUri %}"
         }
       },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 6,
+          "BackoffRate": 2
+        }
+      ],
       "Next": "SegmentSyllabus"
     },
     "SegmentSyllabus": {
@@ -138,11 +190,24 @@
         "FunctionName": "${SEGMENT_SYLLABUS_FUNCTION_ARN}",
         "Payload": {
           "mediaFileUri": "{% $states.context.Execution.Input.mediaFileUri %}",
-          "transcribeData": "{% $states.input.transcribeData %}",
+          "transcriptFileUri": "{% $states.input.transcriptFileUri %}",
           "transcriptText": "{% $states.input.transcriptText %}",
           "translatedTranscripts": "{% $states.input.translatedTranscripts %}"
         }
       },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 6,
+          "BackoffRate": 2
+        }
+      ],
       "Next": "ParallelGen"
     },
     "ParallelGen": {
@@ -156,14 +221,46 @@
             "GenerateGlobalAssets": {
               "Type": "Task",
               "Resource": "arn:aws:states:::lambda:invoke",
-              "Output": "{% $states.result.Payload %}",
+              "Output": "{% $merge([$states.input, $states.result.Payload]) %}",
               "Arguments": {
                 "FunctionName": "${GENERATE_ASSETS_FUNCTION_ARN}",
                 "Payload": {
                   "mediaFileUri": "{% $states.input.mediaFileUri %}",
-                  "transcribeData": "{% $states.input.transcribeData %}"
+                  "transcriptFileUri": "{% $states.input.transcriptFileUri %}"
                 }
               },
+              "Retry": [
+                {
+                  "ErrorEquals": [
+                    "Lambda.ServiceException",
+                    "Lambda.AWSLambdaException",
+                    "Lambda.SdkClientException",
+                    "Lambda.TooManyRequestsException"
+                  ],
+                  "IntervalSeconds": 2,
+                  "MaxAttempts": 6,
+                  "BackoffRate": 2
+                },
+                {
+                  "ErrorEquals": [
+                    "States.ALL"
+                  ],
+                  "IntervalSeconds": 5,
+                  "MaxAttempts": 3,
+                  "BackoffRate": 2
+                }
+              ],
+              "Catch": [
+                {
+                  "ErrorEquals": ["States.ALL"],
+                  "Next": "GlobalAssetsFallback"
+                }
+              ],
+              "End": true
+            },
+            "GlobalAssetsFallback": {
+              "Type": "Pass",
+              "Output": "{% $merge([$states.input, { \"summary\": \"(Course summary temporarily unavailable)\", \"qa\": \"\", \"flashcards\": \"\", \"keyTakeaways\": \"\", \"translations\": [], \"localized\": [] }]) %}",
               "End": true
             }
           }
@@ -178,7 +275,7 @@
                 "lesson": "{% $states.context.Map.Item.Value %}",
                 "index": "{% $states.context.Map.Item.Index %}",
                 "mediaFileUri": "{% $states.input.mediaFileUri %}",
-                "transcribeData": "{% $states.input.transcribeData %}"
+                "transcriptFileUri": "{% $states.input.transcriptFileUri %}"
               },
               "ItemProcessor": {
                 "ProcessorConfig": {
@@ -189,7 +286,7 @@
                   "SliceSegment": {
                     "Type": "Task",
                     "Resource": "arn:aws:states:::lambda:invoke",
-                    "Output": "{% $states.result.Payload %}",
+                    "Output": "{% $merge([$states.input, $states.result.Payload]) %}",
                     "Arguments": {
                       "FunctionName": "${SLICE_SEGMENT_FUNCTION_ARN}",
                       "Payload": {
@@ -198,6 +295,19 @@
                         "index": "{% $states.input.index %}"
                       }
                     },
+                    "Retry": [
+                      {
+                        "ErrorEquals": [
+                          "Lambda.ServiceException",
+                          "Lambda.AWSLambdaException",
+                          "Lambda.SdkClientException",
+                          "Lambda.TooManyRequestsException"
+                        ],
+                        "IntervalSeconds": 2,
+                        "MaxAttempts": 6,
+                        "BackoffRate": 2
+                      }
+                    ],
                     "Next": "GenerateLessonAssets"
                   },
                   "GenerateLessonAssets": {
@@ -208,10 +318,42 @@
                       "FunctionName": "${GENERATE_ASSETS_FUNCTION_ARN}",
                       "Payload": {
                         "mediaFileUri": "{% $states.input.mediaFileUri %}",
-                        "transcribeData": "{% $states.input.transcribeData %}",
+                        "transcriptFileUri": "{% $states.input.transcriptFileUri %}",
                         "lesson": "{% $states.input.lesson %}"
                       }
                     },
+                    "Retry": [
+                      {
+                        "ErrorEquals": [
+                          "Lambda.ServiceException",
+                          "Lambda.AWSLambdaException",
+                          "Lambda.SdkClientException",
+                          "Lambda.TooManyRequestsException"
+                        ],
+                        "IntervalSeconds": 2,
+                        "MaxAttempts": 6,
+                        "BackoffRate": 2
+                      },
+                      {
+                        "ErrorEquals": [
+                          "States.ALL"
+                        ],
+                        "IntervalSeconds": 5,
+                        "MaxAttempts": 3,
+                        "BackoffRate": 2
+                      }
+                    ],
+                    "Catch": [
+                      {
+                        "ErrorEquals": ["States.ALL"],
+                        "Next": "LessonAssetsFallback"
+                      }
+                    ],
+                    "End": true
+                  },
+                  "LessonAssetsFallback": {
+                    "Type": "Pass",
+                    "Output": "{% { \"lesson\": $merge([$states.input.lesson, { \"summary\": \"(Summary temporarily unavailable)\", \"qa\": \"\", \"flashcards\": \"\", \"keyTakeaways\": \"\" }]) } %}",
                     "End": true
                   }
                 }
@@ -236,6 +378,19 @@
           "lessons": "{% $states.input[1] %}"
         }
       },
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 6,
+          "BackoffRate": 2
+        }
+      ],
       "Next": "Success"
     },
     "Fail": {

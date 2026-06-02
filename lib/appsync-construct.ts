@@ -15,6 +15,7 @@ import * as sfn from "aws-cdk-lib/aws-stepfunctions";
 import * as events from "aws-cdk-lib/aws-events";
 import * as targets from "aws-cdk-lib/aws-events-targets";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
+import * as amplify from "aws-cdk-lib/aws-amplify";
 
 import { PythonFunction } from "@aws-cdk/aws-lambda-python-alpha";
 import { BEDROCK_MODELS, DEFAULT_API_KEY_EXPIRATION_DAYS } from "./constants";
@@ -221,6 +222,7 @@ export class AppSyncConstruct extends Construct {
         resources: ["*"],
       })
     );
+    this.mediaBucket.grantRead(transcribeFunction);
 
     const translateFunction = new PythonFunction(this, "translateFunction", {
       entry: "./src/py/",
@@ -645,6 +647,18 @@ export class AppSyncConstruct extends Construct {
 
     this.api.addEnvironmentVariable("FOUNDATION_MODEL_ARN", BEDROCK_MODELS.CLAUDE_3_5_SONNET);
 
+    // AWS Amplify App for manual deployment
+    const amplifyApp = new amplify.CfnApp(this, "EducloudWorkflowPortalApp", {
+      name: "educloud-workflow-portal",
+      platform: "WEB",
+    });
+
+    const mainBranch = new amplify.CfnBranch(this, "EducloudWorkflowPortalMainBranch", {
+      appId: amplifyApp.attrAppId,
+      branchName: "main",
+      enableAutoBuild: false,
+    });
+
     new cdk.CfnOutput(this, "GraphQLAPIEndpoint", {
       value: this.api.graphqlUrl,
       description: " The GraphQL API Endpoint",
@@ -656,6 +670,22 @@ export class AppSyncConstruct extends Construct {
 
     new cdk.CfnOutput(this, "UserPoolClientId", {
       value: cognitoResources.userPoolClient.userPoolClientId,
+    });
+
+    new cdk.CfnOutput(this, "GraphQLAPIKey", {
+      value: this.api.apiKey || "",
+    });
+
+    new cdk.CfnOutput(this, "MediaBucketName", {
+      value: this.mediaBucket.bucketName,
+    });
+
+    new cdk.CfnOutput(this, "AmplifyAppId", {
+      value: amplifyApp.attrAppId,
+    });
+
+    new cdk.CfnOutput(this, "AmplifyBranchName", {
+      value: mainBranch.branchName,
     });
   }
 }

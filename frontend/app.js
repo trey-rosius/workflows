@@ -94,9 +94,9 @@ function parseQA(qaText) {
   const qas = [];
   const lines = qaText.split('\n');
 
-  const qRegex = /^\s*(?:\d+\.|\*|-)?\s*\*\*?(?:Q|Question)(?:\s*\d+)?\*\*?\s*:/i;
-  const aRegex = /^\s*(?:\d+\.|\*|-)?\s*\*\*?(?:A|Answer)(?:\s*\d+)?\*\*?\s*:/i;
-  const optRegex = /^\s*(?:\d+\.|\*|-)?\s*\*\*?([A-D])\*\*?\s*:/i;
+  const qRegex = /^\s*(?:\d+\.|\*|-)?\s*\*\*?(?:Q|Question)(?:\s*\d+)?(?::\*\*?|\*\*?\s*:)/i;
+  const aRegex = /^\s*(?:\d+\.|\*|-)?\s*\*\*?(?:A|Answer)(?:\s*\d+)?(?::\*\*?|\*\*?\s*:)/i;
+  const optRegex = /^\s*(?:\d+\.|\*|-)?\s*\*\*?([A-D])(?::\*\*?|\*\*?\s*:)/i;
 
   let currentItem = null;
 
@@ -110,7 +110,7 @@ function parseQA(qaText) {
       }
       const qText = trimmed
         .replace(/^\s*(?:\d+\.|\*|-)\s*/, '')
-        .replace(/^\*\*?(?:Q|Question)(?:\s*\d+)?\*\*?\s*:\s*\*\*?/i, '')
+        .replace(/^\*\*?(?:Q|Question)(?:\s*\d+)?(?::\*\*?|\*\*?\s*:)\s*/i, '')
         .replace(/\*\*+\s*$/, '')
         .trim();
       currentItem = {
@@ -119,16 +119,10 @@ function parseQA(qaText) {
         correctIndex: null,
         answer: ""
       };
-    } else if (aRegex.test(trimmed) && currentItem) {
-      currentItem.answer = trimmed
-        .replace(/^\s*(?:\d+\.|\*|-)\s*/, '')
-        .replace(/^\*\*?(?:A|Answer)(?:\s*\d+)?\*\*?\s*:\s*\*\*?/i, '')
-        .replace(/\*\*+\s*$/, '')
-        .trim();
     } else if (optRegex.test(trimmed) && currentItem) {
       const match = trimmed.match(optRegex);
       const optionLetter = match[1].toUpperCase();
-      let optionText = match[2].trim();
+      let optionText = trimmed.replace(optRegex, '').trim();
       
       const isCorrect = optionText.toLowerCase().includes('(correct)') || optionText.toLowerCase().includes('[correct]');
       optionText = optionText
@@ -142,6 +136,12 @@ function parseQA(qaText) {
         currentItem.correctIndex = optionIndex;
         currentItem.answer = optionText;
       }
+    } else if (aRegex.test(trimmed) && currentItem) {
+      currentItem.answer = trimmed
+        .replace(/^\s*(?:\d+\.|\*|-)\s*/, '')
+        .replace(/^\*\*?(?:A|Answer)(?:\s*\d+)?(?::\*\*?|\*\*?\s*:)\s*/i, '')
+        .replace(/\*\*+\s*$/, '')
+        .trim();
     } else if (currentItem) {
       if (currentItem.answer) {
         currentItem.answer += "\n" + trimmed;
@@ -158,7 +158,10 @@ function parseQA(qaText) {
   return qas.map(item => {
     if (item.options.length > 0) {
       item.options = item.options.filter(opt => opt !== undefined);
-      if (item.correctIndex === null) {
+      if (item.options.length === 1) {
+        item.answer = item.options[0];
+        item.options = [];
+      } else if (item.correctIndex === null) {
         item.correctIndex = 0;
       }
     }
@@ -305,11 +308,25 @@ async function loadLibrary() {
     for (const local of localProcessing) {
       if (!videos.find(v => v.videoUri === local.videoUri)) {
         videos.unshift(local);
-        startPolling(local.videoUri);
+      }
+    }
+
+    // Automatically start polling for any in-progress videos
+    for (const video of videos) {
+      const isReady = video.status === 'COMPLETED' || video.status === 'DRAFT' || video.status === 'PUBLISHED';
+      if (!isReady) {
+        startPolling(video.videoUri);
       }
     }
 
     renderVideoList();
+    
+    if (activeVideoUri) {
+      const currentActive = videos.find(v => v.videoUri === activeVideoUri);
+      if (currentActive) {
+        selectVideo(activeVideoUri);
+      }
+    }
   } catch (error) {
     videoList.innerHTML = `<div class="loading-spinner-small" style="color: var(--status-failed)">Failed to load library.</div>`;
   }
@@ -1235,3 +1252,62 @@ function renderHeaderActions(video) {
   container.innerHTML = html;
 }
 window.renderHeaderActions = renderHeaderActions;
+
+// ========================================
+// MOBILE SIDEBAR TOGGLE
+// ========================================
+(function setupMobileSidebar() {
+  const toggleBtn = document.getElementById("mobile-menu-toggle");
+  const sidebar = document.getElementById("sidebar");
+  const overlay = document.getElementById("sidebar-overlay");
+
+  if (!toggleBtn || !sidebar || !overlay) return;
+
+  function openSidebar() {
+    sidebar.classList.add("open");
+    overlay.classList.add("visible");
+    toggleBtn.classList.add("active");
+  }
+
+  function closeSidebar() {
+    sidebar.classList.remove("open");
+    overlay.classList.remove("visible");
+    toggleBtn.classList.remove("active");
+  }
+
+  toggleBtn.addEventListener("click", () => {
+    if (sidebar.classList.contains("open")) {
+      closeSidebar();
+    } else {
+      openSidebar();
+    }
+  });
+
+  overlay.addEventListener("click", closeSidebar);
+
+  // Auto-close sidebar on mobile when a video is selected
+  const origSelectVideo = window.selectVideo || selectVideo;
+  const wrappedSelectVideo = async function(videoUri) {
+    if (window.innerWidth <= 768) {
+      closeSidebar();
+    }
+    // selectVideo is declared with async function, call it directly
+    return origSelectVideo(videoUri);
+  };
+  // Expose wrapped version for onclick handlers
+  window.selectVideoMobile = wrappedSelectVideo;
+})();
+
+// Override selectVideo on global scope so onclick="selectVideo(...)" in sidebar auto-closes on mobile
+const _origSelectVideoForMobile = selectVideo;
+window.selectVideo = async function(videoUri) {
+  if (window.innerWidth <= 768) {
+    const sidebar = document.getElementById("sidebar");
+    const overlay = document.getElementById("sidebar-overlay");
+    const toggleBtn = document.getElementById("mobile-menu-toggle");
+    if (sidebar) sidebar.classList.remove("open");
+    if (overlay) overlay.classList.remove("visible");
+    if (toggleBtn) toggleBtn.classList.remove("active");
+  }
+  return _origSelectVideoForMobile(videoUri);
+};

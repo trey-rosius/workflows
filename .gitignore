@@ -16,5 +16,12 @@ cdk.out
 .DS_Store
 *.json.log
 response.json
+__pycache__/
+**/__pycache__/
+*.pyc
+**/*.pyc
+cdk-outputs.json
+
+
 
 

@@ -33,6 +33,7 @@ type VideoAssets @aws_api_key @aws_cognito_user_pools {
   title: String
   description: String
   status: String
+  message: String
   summary: String
   qa: String
   flashcards: String
