@@ -1,1 +1,1 @@
-# No requirements needed. Utilizing standard boto3 client.
+aws-durable-execution-sdk-python==1.5.0

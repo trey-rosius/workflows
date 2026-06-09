@@ -108,6 +108,14 @@ export class AppSyncConstruct extends Construct {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
+    const coursesTable = new dynamodb.Table(this, "CoursesTable", {
+      tableName: `${cdk.Stack.of(this).account}-${cdk.Stack.of(this).region}-courses-table`,
+      partitionKey: { name: "courseId", type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
+
     const cognitoResources = new CognitoConstruct(this, "CognitoResources");
 
     this.api = new appsync.GraphqlApi(this, "video-agent-api", {
@@ -175,6 +183,23 @@ export class AppSyncConstruct extends Construct {
       retention: logs.RetentionDays.ONE_WEEK,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
+    const strandsMultiAgentFunctionLogs = new logs.LogGroup(this, "strandsMultiAgentFunctionLogs", {
+      retention: logs.RetentionDays.ONE_WEEK,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+    const durableCourseIngestionLogs = new logs.LogGroup(this, "durableCourseIngestionLogs", {
+      retention: logs.RetentionDays.ONE_WEEK,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+    const askChatbotLogs = new logs.LogGroup(this, "askChatbotLogs", {
+      retention: logs.RetentionDays.ONE_WEEK,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+    const generateContentLogs = new logs.LogGroup(this, "generateContentLogs", {
+      retention: logs.RetentionDays.ONE_WEEK,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
 
     this.saveEmbeddingsFunction = new PythonFunction(this, "saveEmbeddingsFunction", {
       entry: "./src/py/",
@@ -319,6 +344,206 @@ export class AppSyncConstruct extends Construct {
     videoAssetsTable.grantReadWriteData(translateFunction);
     videoAssetsTable.grantReadWriteData(segmentSyllabusFunction);
 
+    const strandsMultiAgentFunction = new PythonFunction(this, "strandsMultiAgentFunction", {
+      entry: "./src/py/",
+      handler: "lambda_handler",
+      index: "strands_multi_agent.py",
+      runtime: lambda.Runtime.PYTHON_3_13,
+      timeout: cdk.Duration.minutes(15),
+      memorySize: 1024,
+      logGroup: strandsMultiAgentFunctionLogs,
+      tracing: lambda.Tracing.ACTIVE,
+      environment: {
+        TABLE_NAME: videoAssetsTable.tableName,
+      },
+      durableConfig: {
+        executionTimeout: cdk.Duration.hours(1),
+        retentionPeriod: cdk.Duration.days(7),
+      },
+    });
+
+    const strandsMultiAgentVersion = strandsMultiAgentFunction.currentVersion;
+
+    // S3 permissions
+    this.mediaBucket.grantReadWrite(strandsMultiAgentFunction);
+
+    // Transcribe permissions
+    strandsMultiAgentFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["transcribe:StartTranscriptionJob", "transcribe:GetTranscriptionJob"],
+        resources: ["*"],
+        effect: iam.Effect.ALLOW,
+      })
+    );
+
+    // EventBridge permissions
+    strandsMultiAgentFunction.addToRolePolicy(putEventsPolicy);
+
+    // Bedrock permissions
+    strandsMultiAgentFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["bedrock:InvokeModel"],
+        resources: ["*"],
+        effect: iam.Effect.ALLOW,
+      })
+    );
+
+    // Bedrock AgentCore Control and Runtime permissions
+    strandsMultiAgentFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: [
+          "bedrock-agentcore:ListAgentRuntimes",
+          "bedrock-agentcore:InvokeAgentRuntime"
+        ],
+        resources: ["*"],
+        effect: iam.Effect.ALLOW,
+      })
+    );
+
+    // Recursive self-invocation for Durable execution
+    strandsMultiAgentFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["lambda:InvokeFunction"],
+        resources: ["*"],
+        effect: iam.Effect.ALLOW,
+      })
+    );
+
+    const durableCourseIngestionFunction = new PythonFunction(this, "durableCourseIngestionFunction", {
+      entry: "./src/py/",
+      handler: "lambda_handler",
+      index: "durable_course_ingestion.py",
+      runtime: lambda.Runtime.PYTHON_3_13,
+      timeout: cdk.Duration.minutes(15),
+      memorySize: 1024,
+      logGroup: durableCourseIngestionLogs,
+      tracing: lambda.Tracing.ACTIVE,
+      environment: {
+        COURSES_TABLE_NAME: coursesTable.tableName,
+        VECTOR_BUCKET_NAME: vectorBucket.vectorBucketName,
+        VECTOR_INDEX_NAME: vectorIndex.indexName,
+      },
+      durableConfig: {
+        executionTimeout: cdk.Duration.hours(1),
+        retentionPeriod: cdk.Duration.days(7),
+      },
+    });
+
+    const durableCourseIngestionVersion = durableCourseIngestionFunction.currentVersion;
+
+    this.mediaBucket.grantReadWrite(durableCourseIngestionFunction);
+    coursesTable.grantReadWriteData(durableCourseIngestionFunction);
+
+    durableCourseIngestionFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["bedrock:InvokeModel"],
+        resources: ["*"],
+        effect: iam.Effect.ALLOW,
+      })
+    );
+
+    durableCourseIngestionFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["s3vectors:PutVectors"],
+        resources: ["*"],
+        effect: iam.Effect.ALLOW,
+      })
+    );
+
+    durableCourseIngestionFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["lambda:InvokeFunction"],
+        resources: ["*"],
+        effect: iam.Effect.ALLOW,
+      })
+    );
+
+    encryptionKey.grantEncryptDecrypt(durableCourseIngestionFunction);
+
+    const askChatbotFunction = new PythonFunction(this, "askChatbotFunction", {
+      entry: "./src/py/",
+      handler: "handler",
+      index: "ask_chatbot.py",
+      runtime: lambda.Runtime.PYTHON_3_12,
+      timeout: cdk.Duration.seconds(30),
+      memorySize: 512,
+      logGroup: askChatbotLogs,
+      tracing: lambda.Tracing.ACTIVE,
+      environment: {
+        COURSES_TABLE_NAME: coursesTable.tableName,
+        VECTOR_BUCKET_NAME: vectorBucket.vectorBucketName,
+        VECTOR_INDEX_NAME: vectorIndex.indexName,
+      },
+    });
+
+    coursesTable.grantReadData(askChatbotFunction);
+
+    askChatbotFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["s3vectors:QueryVectors", "s3vectors:GetIndex", "s3vectors:GetVectors"],
+        resources: ["*"],
+        effect: iam.Effect.ALLOW,
+      })
+    );
+
+    askChatbotFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["bedrock:InvokeModel"],
+        resources: ["*"],
+        effect: iam.Effect.ALLOW,
+      })
+    );
+
+    encryptionKey.grantDecrypt(askChatbotFunction);
+
+    const generateContentFunction = new PythonFunction(this, "generateContentFunction", {
+      entry: "./src/py/",
+      handler: "handler",
+      index: "generate_content.py",
+      runtime: lambda.Runtime.PYTHON_3_12,
+      timeout: cdk.Duration.minutes(5),
+      memorySize: 512,
+      logGroup: generateContentLogs,
+      tracing: lambda.Tracing.ACTIVE,
+      environment: {
+        COURSES_TABLE_NAME: coursesTable.tableName,
+      },
+    });
+
+    coursesTable.grantReadWriteData(generateContentFunction);
+
+    generateContentFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["bedrock:InvokeModel"],
+        resources: ["*"],
+        effect: iam.Effect.ALLOW,
+      })
+    );
+
+    const triggerCourseIngestionFunction = new PythonFunction(this, "triggerCourseIngestionFunction", {
+      entry: "./src/py/",
+      handler: "handler",
+      index: "trigger_course_ingestion.py",
+      runtime: lambda.Runtime.PYTHON_3_12,
+      timeout: cdk.Duration.seconds(30),
+      environment: {
+        DURABLE_COURSE_INGESTION_ARN: durableCourseIngestionVersion.functionArn,
+      },
+    });
+
+    triggerCourseIngestionFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["lambda:InvokeFunction"],
+        resources: [
+          durableCourseIngestionFunction.functionArn,
+          `${durableCourseIngestionFunction.functionArn}:*`
+        ],
+        effect: iam.Effect.ALLOW,
+      })
+    );
+
+
+
     const stateMachineRole = new iam.Role(this, "StateMachineRole", {
       assumedBy: new iam.ServicePrincipal("states.amazonaws.com"),
       description: "IAM Role assumed by the Step Functions state machine",
@@ -404,6 +629,7 @@ export class AppSyncConstruct extends Construct {
       environment: {
         STATE_MACHINE_ARN: this.generateEmbeddingsStateMachine.stateMachineArn,
         SOURCE_BUCKET_NAME: this.mediaBucket.bucketName,
+        DURABLE_ORCHESTRATOR_ARN: strandsMultiAgentVersion.functionArn,
       },
       bundling: {
         minify: true,
@@ -440,6 +666,16 @@ export class AppSyncConstruct extends Construct {
       new iam.PolicyStatement({
         actions: ["states:StartExecution", "states:DescribeExecution"],
         resources: [this.generateEmbeddingsStateMachine.stateMachineArn],
+        effect: iam.Effect.ALLOW,
+      })
+    );
+    this.invokeWorkflowFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["lambda:InvokeFunction"],
+        resources: [
+          strandsMultiAgentFunction.functionArn,
+          `${strandsMultiAgentFunction.functionArn}:*`
+        ],
         effect: iam.Effect.ALLOW,
       })
     );
@@ -662,6 +898,55 @@ export class AppSyncConstruct extends Construct {
       runtime: appsync.FunctionRuntime.JS_1_0_0,
       code: appsync.Code.fromAsset("./resolvers/saveDraftEdits.js"),
     });
+
+    const coursesDs = this.api.addDynamoDbDataSource("CoursesDataSource", coursesTable);
+    
+    this.api.createResolver("ListCoursesResolver", {
+      typeName: "Query",
+      fieldName: "listCourses",
+      dataSource: coursesDs,
+      runtime: appsync.FunctionRuntime.JS_1_0_0,
+      code: appsync.Code.fromAsset("./resolvers/listCourses.js"),
+    });
+
+    this.api.createResolver("GetCourseResolver", {
+      typeName: "Query",
+      fieldName: "getCourse",
+      dataSource: coursesDs,
+      runtime: appsync.FunctionRuntime.JS_1_0_0,
+      code: appsync.Code.fromAsset("./resolvers/getCourse.js"),
+    });
+
+    const askChatbotDs = this.api.addLambdaDataSource("AskChatbotDataSource", askChatbotFunction);
+    askChatbotDs.createResolver("AskCourseChatbotResolver", {
+      typeName: "Query",
+      fieldName: "askCourseChatbot",
+      code: appsync.Code.fromAsset(path.join(__dirname, "../resolvers/invoke/invoke.js")),
+      runtime: appsync.FunctionRuntime.JS_1_0_0,
+    });
+
+    const triggerCourseIngestionDs = this.api.addLambdaDataSource("TriggerCourseIngestionDataSource", triggerCourseIngestionFunction);
+    triggerCourseIngestionDs.createResolver("TriggerCourseIngestionResolver", {
+      typeName: "Mutation",
+      fieldName: "triggerCourseIngestion",
+      code: appsync.Code.fromAsset(path.join(__dirname, "../resolvers/invoke/invoke.js")),
+      runtime: appsync.FunctionRuntime.JS_1_0_0,
+    });
+
+    const generateContentDs = this.api.addLambdaDataSource("GenerateContentDataSource", generateContentFunction);
+    generateContentDs.createResolver("GenerateQuizForLessonResolver", {
+      typeName: "Mutation",
+      fieldName: "generateQuizForLesson",
+      code: appsync.Code.fromAsset(path.join(__dirname, "../resolvers/invoke/invoke.js")),
+      runtime: appsync.FunctionRuntime.JS_1_0_0,
+    });
+    generateContentDs.createResolver("GenerateFlashcardsForLessonResolver", {
+      typeName: "Mutation",
+      fieldName: "generateFlashcardsForLesson",
+      code: appsync.Code.fromAsset(path.join(__dirname, "../resolvers/invoke/invoke.js")),
+      runtime: appsync.FunctionRuntime.JS_1_0_0,
+    });
+
 
     this.api.addEnvironmentVariable("FOUNDATION_MODEL_ARN", BEDROCK_MODELS.CLAUDE_3_5_SONNET);
 

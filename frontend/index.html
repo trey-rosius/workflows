@@ -35,168 +35,367 @@
         <p class="subtitle">Video Learning Assistant</p>
       </header>
 
-      <!-- Drag & Drop Upload Zone -->
-      <section class="upload-section">
-        <div id="dropzone" class="dropzone">
-          <input type="file" id="file-input" accept="video/mp4,video/quicktime,video/webm" style="display: none;">
-          <div class="dropzone-content">
-            <span class="upload-icon">📤</span>
-            <p class="dropzone-text">Drag & drop video here or <span class="highlight">browse</span></p>
-            <p class="dropzone-hint">Supports MP4, MOV, WEBM (Max 500MB)</p>
-          </div>
-        </div>
-
-        <!-- Active Upload Progress -->
-        <div id="upload-progress-container" class="upload-progress-container hidden">
-          <div class="progress-details">
-            <span id="upload-file-name">filename.mp4</span>
-            <span id="upload-percentage">0%</span>
-          </div>
-          <div class="progress-bar-bg">
-            <div id="upload-progress-bar" class="progress-bar-fill" style="width: 0%;"></div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Video History Section -->
-      <section class="history-section">
-        <h2 class="section-title">Your Videos <span id="video-count-badge" class="badge">0</span></h2>
-        
-        <!-- Refresh Button -->
-        <button id="btn-refresh" class="btn-icon-text">
-          <span>🔄</span> Refresh Library
+      <!-- Navigation for Switching Views -->
+      <nav class="sidebar-nav" style="margin-bottom: 1.5rem; display: flex; gap: 0.5rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem;">
+        <button id="nav-btn-analyzer" class="sidebar-nav-item active" style="flex: 1; padding: 0.5rem; background: transparent; border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-main); cursor: pointer; font-family: var(--font-family); font-size: 0.8rem; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 0.25rem;">
+          📹 Video AI
         </button>
+        <button id="nav-btn-courses" class="sidebar-nav-item" style="flex: 1; padding: 0.5rem; background: transparent; border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-muted); cursor: pointer; font-family: var(--font-family); font-size: 0.8rem; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 0.25rem;">
+          📚 Courses
+        </button>
+      </nav>
 
-        <div id="video-list" class="video-list">
-          <!-- Dynamically populated files -->
-          <div class="loading-spinner-small">Loading videos...</div>
-        </div>
-      </section>
+      <!-- Sidebar Contents for Analyzer -->
+      <div id="analyzer-sidebar-contents">
+        <!-- Drag & Drop Upload Zone -->
+        <section class="upload-section">
+          <div id="dropzone" class="dropzone">
+            <input type="file" id="file-input" accept="video/mp4,video/quicktime,video/webm" style="display: none;">
+            <div class="dropzone-content">
+              <span class="upload-icon">📤</span>
+              <p class="dropzone-text">Drag & drop video here or <span class="highlight">browse</span></p>
+              <p class="dropzone-hint">Supports MP4, MOV, WEBM (Max 500MB)</p>
+            </div>
+          </div>
+
+          <!-- Active Upload Progress -->
+          <div id="upload-progress-container" class="upload-progress-container hidden">
+            <div class="progress-details">
+              <span id="upload-file-name">filename.mp4</span>
+              <span id="upload-percentage">0%</span>
+            </div>
+            <div class="progress-bar-bg">
+              <div id="upload-progress-bar" class="progress-bar-fill" style="width: 0%;"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Video History Section -->
+        <section class="history-section">
+          <h2 class="section-title">Your Videos <span id="video-count-badge" class="badge">0</span></h2>
+          
+          <!-- Refresh Button -->
+          <button id="btn-refresh" class="btn-icon-text">
+            <span>🔄</span> Refresh Library
+          </button>
+
+          <div id="video-list" class="video-list">
+            <!-- Dynamically populated files -->
+            <div class="loading-spinner-small">Loading videos...</div>
+          </div>
+        </section>
+      </div>
+
+      <!-- Sidebar Contents for Course Portal -->
+      <div id="courses-sidebar-contents" class="hidden">
+        <section class="courses-nav-section">
+          <h2 class="section-title">Course Navigator <span id="course-count-badge" class="badge">0</span></h2>
+          
+          <button id="btn-admin-ingest" class="btn-primary" style="width: 100%; margin-bottom: 1.25rem; font-size: 0.85rem; padding: 0.6rem; display: flex; align-items: center; justify-content: center; gap: 0.4rem; box-shadow: 0 4px 10px rgba(6, 182, 212, 0.2);">
+            <span>⚙️</span> Ingest Courses
+          </button>
+
+          <div id="courses-sidebar-list" class="video-list">
+            <!-- Dynamically populated courses -->
+            <div class="loading-spinner-small">Loading courses...</div>
+          </div>
+        </section>
+      </div>
     </aside>
 
     <!-- Main Workspace: Video Player & Generated Insights -->
     <main class="main-content">
-      <!-- Welcome Screen (Default) -->
-      <section id="welcome-screen" class="welcome-screen">
-        <div class="welcome-card">
-          <div class="welcome-hero">📚</div>
-          <h1>Welcome to EduCloud AI</h1>
-          <p>Analyze educational videos instantly. Extract rich structured summaries, generate recall assessment questions, and study with interactive 3D flashcards powered by Strands Agents and Bedrock Nova Pro.</p>
-          <div class="welcome-actions">
-            <button id="btn-welcome-browse" class="btn-primary">Browse Video File</button>
-          </div>
-        </div>
-      </section>
-
-      <!-- Workspace Dashboard (Active Video Selected) -->
-      <section id="workspace" class="workspace hidden">
-        <header class="workspace-header">
-          <div class="title-area">
-            <h1 id="active-video-title">luxehome_voice.mp4</h1>
-            <span id="active-video-status" class="status-badge status-completed">Completed</span>
-          </div>
-          <div class="header-actions" id="header-actions"></div>
-        </header>
-
-        <div class="workspace-grid">
-          <!-- Video Player Column -->
-          <div class="video-column">
-            <div class="player-container">
-              <video id="video-player" controls preload="metadata">
-                Your browser does not support the video tag.
-              </video>
+      <!-- CONTAINER 1: Video Analyzer Workspace -->
+      <div id="analyzer-workspace-container" class="workspace-tab-container" style="height: 100%; display: flex; flex-direction: column;">
+        <!-- Welcome Screen (Default) -->
+        <section id="welcome-screen" class="welcome-screen">
+          <div class="welcome-card">
+            <div class="welcome-hero">📚</div>
+            <h1>Welcome to EduCloud AI</h1>
+            <p>Analyze educational videos instantly. Extract rich structured summaries, generate recall assessment questions, and study with interactive 3D flashcards powered by Strands Agents and Bedrock Nova Pro.</p>
+            <div class="welcome-actions">
+              <button id="btn-welcome-browse" class="btn-primary">Browse Video File</button>
             </div>
-            
-            <div id="processing-banner" class="processing-banner hidden">
-              <div class="pulse-ring"></div>
-              <div class="banner-text">
-                <h3>AI Processing in Progress...</h3>
-                <p>Generating embeddings and running Strands cognitive agents (Summarizer, QA, Flashcards). This will update automatically in a few moments.</p>
-              </div>
-            </div>
-
-            <!-- Course Syllabus Panel -->
-            <section class="syllabus-panel" id="syllabus-panel">
-              <h2 class="syllabus-title">🎓 Course Syllabus</h2>
-              <div id="syllabus-content" class="syllabus-content">
-                <!-- Dynamically populated lessons list -->
-                <p class="text-muted">No modules detected yet.</p>
-              </div>
-            </section>
           </div>
+        </section>
 
-          <!-- Insights Tabbed Column -->
-          <div class="insights-column">
-            <nav class="tabs-nav" aria-label="Learning Assets Tabs">
-              <button id="tab-summary" class="tab-button active" onclick="switchTab('summary')">📝 Summary</button>
-              <button id="tab-takeaways" class="tab-button" onclick="switchTab('takeaways')">💡 Key Takeaways</button>
-              <button id="tab-qa" class="tab-button" onclick="switchTab('qa')">❓ Q&A Quiz</button>
-              <button id="tab-flashcards" class="tab-button" onclick="switchTab('flashcards')">🎴 Flashcards</button>
-            </nav>
+        <!-- Workspace Dashboard (Active Video Selected) -->
+        <section id="workspace" class="workspace hidden">
+          <header class="workspace-header">
+            <div class="title-area">
+              <h1 id="active-video-title">luxehome_voice.mp4</h1>
+              <span id="active-video-status" class="status-badge status-completed">Completed</span>
+            </div>
+            <div class="header-actions" id="header-actions"></div>
+          </header>
 
-            <!-- Tabs Content Containers -->
-            <div class="tab-contents">
+          <div class="workspace-grid">
+            <!-- Video Player Column -->
+            <div class="video-column">
+              <div class="player-container">
+                <video id="video-player" controls preload="metadata">
+                  Your browser does not support the video tag.
+                </video>
+              </div>
               
-              <!-- Tab 1: Summary -->
-              <article id="content-summary" class="tab-pane active">
-                <div class="markdown-body" id="summary-text">
-                  <!-- Generated summary will be output here -->
+              <div id="processing-banner" class="processing-banner hidden">
+                <div class="pulse-ring"></div>
+                <div class="banner-text">
+                  <h3>AI Processing in Progress...</h3>
+                  <p>Generating embeddings and running Strands cognitive agents (Summarizer, QA, Flashcards). This will update automatically in a few moments.</p>
                 </div>
-              </article>
+              </div>
 
-              <!-- Tab 4: Key Takeaways -->
-              <article id="content-takeaways" class="tab-pane">
-                <div class="markdown-body" id="takeaways-text">
-                  <!-- Generated Key Takeaways will be output here -->
+              <!-- Course Syllabus Panel -->
+              <section class="syllabus-panel" id="syllabus-panel">
+                <h2 class="syllabus-title">🎓 Course Syllabus</h2>
+                <div id="syllabus-content" class="syllabus-content">
+                  <!-- Dynamically populated lessons list -->
+                  <p class="text-muted">No modules detected yet.</p>
                 </div>
-              </article>
+              </section>
+            </div>
 
-              <!-- Tab 2: QA List -->
-              <article id="content-qa" class="tab-pane">
-                <div class="qa-container" id="qa-list">
-                  <!-- Generated Q&A accordion will be output here -->
-                </div>
-              </article>
+            <!-- Insights Tabbed Column -->
+            <div class="insights-column">
+              <nav class="tabs-nav" aria-label="Learning Assets Tabs">
+                <button id="tab-summary" class="tab-button active" onclick="switchTab('summary')">📝 Summary</button>
+                <button id="tab-takeaways" class="tab-button" onclick="switchTab('takeaways')">💡 Key Takeaways</button>
+                <button id="tab-qa" class="tab-button" onclick="switchTab('qa')">❓ Q&A Quiz</button>
+                <button id="tab-flashcards" class="tab-button" onclick="switchTab('flashcards')">🎴 Flashcards</button>
+              </nav>
 
-              <!-- Tab 3: Flashcards -->
-              <article id="content-flashcards" class="tab-pane">
-                <div class="flashcards-deck-container">
-                  <!-- The 3D Flashcard Deck -->
-                  <div class="flashcard-slider">
-                    <div id="flashcard-deck" class="flashcard-deck">
-                      <!-- Dynamically generated 3D flip card -->
-                      <div class="flashcard-container" id="current-flashcard">
-                        <div class="flashcard-inner" onclick="flipCard()">
-                          <div class="flashcard-front">
-                            <span class="card-side-label">QUESTION</span>
-                            <div class="card-text" id="card-front-text">Front Text</div>
-                            <span class="click-hint">Click card to reveal answer</span>
-                          </div>
-                          <div class="flashcard-back">
-                            <span class="card-side-label">ANSWER</span>
-                            <div class="card-text" id="card-back-text">Back Text</div>
-                            <span class="click-hint">Click card to view question</span>
+              <!-- Tabs Content Containers -->
+              <div class="tab-contents">
+                
+                <!-- Tab 1: Summary -->
+                <article id="content-summary" class="tab-pane active">
+                  <div class="markdown-body" id="summary-text">
+                    <!-- Generated summary will be output here -->
+                  </div>
+                </article>
+
+                <!-- Tab 4: Key Takeaways -->
+                <article id="content-takeaways" class="tab-pane">
+                  <div class="markdown-body" id="takeaways-text">
+                    <!-- Generated Key Takeaways will be output here -->
+                  </div>
+                </article>
+
+                <!-- Tab 2: QA List -->
+                <article id="content-qa" class="tab-pane">
+                  <div class="qa-container" id="qa-list">
+                    <!-- Generated Q&A accordion will be output here -->
+                  </div>
+                </article>
+
+                <!-- Tab 3: Flashcards -->
+                <article id="content-flashcards" class="tab-pane">
+                  <div class="flashcards-deck-container">
+                    <!-- The 3D Flashcard Deck -->
+                    <div class="flashcard-slider">
+                      <div id="flashcard-deck" class="flashcard-deck">
+                        <!-- Dynamically generated 3D flip card -->
+                        <div class="flashcard-container" id="current-flashcard">
+                          <div class="flashcard-inner" onclick="flipCard()">
+                            <div class="flashcard-front">
+                              <span class="card-side-label">QUESTION</span>
+                              <div class="card-text" id="card-front-text">Front Text</div>
+                              <span class="click-hint">Click card to reveal answer</span>
+                            </div>
+                            <div class="flashcard-back">
+                              <span class="card-side-label">ANSWER</span>
+                              <div class="card-text" id="card-back-text">Back Text</div>
+                              <span class="click-hint">Click card to view question</span>
+                            </div>
                           </div>
                         </div>
                       </div>
                     </div>
+
+                    <!-- Flashcard Controls -->
+                    <footer class="flashcard-controls">
+                      <button id="btn-prev-card" class="btn-secondary" onclick="prevCard()">◀ Prev</button>
+                      <span id="card-counter" class="card-counter">1 / 5</span>
+                      <button id="btn-next-card" class="btn-secondary" onclick="nextCard()">Next ▶</button>
+                    </footer>
                   </div>
+                </article>
 
-                  <!-- Flashcard Controls -->
-                  <footer class="flashcard-controls">
-                    <button id="btn-prev-card" class="btn-secondary" onclick="prevCard()">◀ Prev</button>
-                    <span id="card-counter" class="card-counter">1 / 5</span>
-                    <button id="btn-next-card" class="btn-secondary" onclick="nextCard()">Next ▶</button>
-                  </footer>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- CONTAINER 2: Courses Portal Workspace -->
+      <div id="courses-workspace-container" class="workspace-tab-container hidden" style="height: 100%; display: flex; flex-direction: column; overflow: hidden; padding: 1.5rem;">
+        
+        <!-- View 2A: Course Library Grid -->
+        <div id="course-library-view" style="display: flex; flex-direction: column; flex-grow: 1; overflow-y: auto; height: 100%;">
+          <header style="margin-bottom: 2rem;">
+            <h1 style="font-size: 2rem; font-weight: 800; background: var(--accent-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Course Curriculum Library</h1>
+            <p style="color: var(--text-muted); font-size: 1rem; margin-top: 0.25rem;">Browse interactive courses and lesson materials from Educloud Academy.</p>
+          </header>
+          
+          <div id="courses-grid" class="courses-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.5rem;">
+            <!-- Dynamically populated course cards -->
+            <div class="loading-spinner-small">Loading courses...</div>
+          </div>
+        </div>
+
+        <!-- View 2B: Course Details Workspace -->
+        <div id="course-detail-view" class="hidden" style="display: flex; flex-direction: column; height: 100%; overflow: hidden;">
+          <header class="workspace-header" style="margin-bottom: 1rem;">
+            <div style="display: flex; align-items: center; gap: 1rem; max-width: 75%;">
+              <button id="btn-course-back" class="btn-secondary" style="padding: 0.4rem 1rem; font-size: 0.8rem; display: flex; align-items: center; gap: 0.25rem;">
+                ◀ Back
+              </button>
+              <div>
+                <h1 id="active-course-title" style="font-size: 1.3rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Course Title</h1>
+                <p id="active-course-desc" style="font-size: 0.8rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Course description</p>
+              </div>
+            </div>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+              <span id="active-course-difficulty" class="status-badge" style="background-color: rgba(147, 51, 234, 0.1); color: var(--accent-purple);">Intermediate</span>
+              <button id="btn-toggle-chatbot" class="btn-primary" style="padding: 0.4rem 1rem; font-size: 0.8rem; display: flex; align-items: center; gap: 0.25rem; box-shadow: 0 4px 10px rgba(147, 51, 234, 0.25);">
+                💬 Ask Tutor
+              </button>
+            </div>
+          </header>
+
+          <div class="workspace-grid" style="flex-grow: 1; overflow: hidden; height: calc(100% - 70px);">
+            <!-- Course Syllabus Column -->
+            <div class="video-column" style="flex: 0.9; display: flex; flex-direction: column; overflow: hidden;">
+              <section class="syllabus-panel" style="height: 100%; margin-bottom: 0; display: flex; flex-direction: column; overflow: hidden;">
+                <h2 class="syllabus-title">🎓 Course Curriculum</h2>
+                <div id="course-syllabus-content" class="syllabus-content" style="flex-grow: 1; overflow-y: auto; padding-right: 0.25rem;">
+                  <!-- Dynamic modules & lessons -->
                 </div>
-              </article>
+              </section>
+            </div>
 
+            <!-- Lesson Content Column -->
+            <div class="insights-column" style="flex: 1.1; display: flex; flex-direction: column; overflow: hidden;">
+              <!-- Nav Tabs for Lesson Details -->
+              <nav class="tabs-nav">
+                <button id="tab-lesson-content" class="tab-button active" onclick="switchLessonTab('content')">📖 Content</button>
+                <button id="tab-lesson-quiz" class="tab-button" onclick="switchLessonTab('quiz')">❓ Quiz</button>
+                <button id="tab-lesson-flashcards" class="tab-button" onclick="switchLessonTab('flashcards')">🎴 Flashcards</button>
+              </nav>
+
+              <!-- Tabs Content Containers -->
+              <div class="tab-contents" style="flex-grow: 1; overflow-y: auto;">
+                
+                <!-- Lesson Markdown Content -->
+                <article id="content-lesson-content" class="tab-pane active">
+                  <div id="lesson-video-container" class="player-container hidden" style="margin-bottom: 1rem;">
+                    <video id="lesson-video-player" controls preload="metadata" style="width: 100%; height: 100%;">
+                      Your browser does not support the video tag.
+                    </video>
+                  </div>
+                  <div class="markdown-body" id="lesson-body-markdown">
+                    <p class="text-muted">Select a lesson from the curriculum list to view content.</p>
+                  </div>
+                </article>
+
+                <!-- Lesson Quiz Panel -->
+                <article id="content-lesson-quiz" class="tab-pane">
+                  <div id="lesson-quiz-generator-section" style="text-align: center; padding: 2rem 1rem;">
+                    <div style="font-size: 3rem; margin-bottom: 1rem;">📝</div>
+                    <h3>No Quiz Generated Yet</h3>
+                    <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 1.5rem; max-width: 400px; margin-left: auto; margin-right: auto;">Instructors can manually trigger the Bedrock AI model to read this lesson and generate an interactive multiple-choice assessment.</p>
+                    <button id="btn-generate-quiz" class="btn-primary" style="font-size: 0.9rem; padding: 0.6rem 1.8rem;">
+                      ✨ Generate Quiz with Nova
+                    </button>
+                  </div>
+                  <div id="lesson-quiz-container" class="qa-container hidden">
+                    <!-- Dynamic quiz elements -->
+                  </div>
+                </article>
+
+                <!-- Lesson Flashcards Panel -->
+                <article id="content-lesson-flashcards" class="tab-pane">
+                  <div id="lesson-fc-generator-section" style="text-align: center; padding: 2rem 1rem;">
+                    <div style="font-size: 3rem; margin-bottom: 1rem;">🎴</div>
+                    <h3>No Flashcards Generated Yet</h3>
+                    <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 1.5rem; max-width: 400px; margin-left: auto; margin-right: auto;">Instructors can manually trigger Bedrock to read this lesson and generate a set of interactive digital flashcards.</p>
+                    <button id="btn-generate-flashcards" class="btn-primary" style="font-size: 0.9rem; padding: 0.6rem 1.8rem;">
+                      ✨ Generate Flashcards with Nova
+                    </button>
+                  </div>
+                  <div id="lesson-flashcards-container" class="flashcards-deck-container hidden">
+                    <!-- Dynamic flashcard card slider -->
+                    <div class="flashcard-slider">
+                      <div class="flashcard-deck">
+                        <div class="flashcard-container" id="lesson-current-card">
+                          <div class="flashcard-inner" onclick="flipLessonCard()">
+                            <div class="flashcard-front">
+                              <span class="card-side-label">QUESTION</span>
+                              <div class="card-text" id="lesson-card-front-text">Front Text</div>
+                              <span class="click-hint">Click card to reveal answer</span>
+                            </div>
+                            <div class="flashcard-back">
+                              <span class="card-side-label">ANSWER</span>
+                              <div class="card-text" id="lesson-card-back-text">Back Text</div>
+                              <span class="click-hint">Click card to view question</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <!-- Controls -->
+                    <footer class="flashcard-controls">
+                      <button id="btn-lesson-prev-card" class="btn-secondary" onclick="prevLessonCard()">◀ Prev</button>
+                      <span id="lesson-card-counter" class="card-counter">1 / 5</span>
+                      <button id="btn-lesson-next-card" class="btn-secondary" onclick="nextLessonCard()">Next ▶</button>
+                    </footer>
+                  </div>
+                </article>
+
+              </div>
             </div>
           </div>
         </div>
-      </section>
+
+        <!-- View 2C: RAG Chatbot Side-Drawer -->
+        <div id="course-chatbot-drawer" style="position: fixed; top: 0; right: -400px; width: 380px; height: 100%; background: hsl(222, 40%, 11%); border-left: 1px solid var(--border-color); box-shadow: -8px 0 32px rgba(0, 0, 0, 0.5); z-index: 100; transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1); display: flex; flex-direction: column; backdrop-filter: blur(20px);">
+          <header style="padding: 1.25rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <span style="font-size: 1.2rem;">🤖</span>
+              <div>
+                <h3 style="font-size: 0.95rem; font-weight: 700; color: var(--text-bright);">Course AI Tutor</h3>
+                <p style="font-size: 0.7rem; color: var(--text-muted);">S3Vectors RAG-based Chat</p>
+              </div>
+            </div>
+            <button id="btn-close-chatbot" style="background: transparent; border: none; color: var(--text-muted); font-size: 1.2rem; cursor: pointer; padding: 0.25rem;">
+              ❌
+            </button>
+          </header>
+          
+          <div id="chatbot-messages" style="flex-grow: 1; overflow-y: auto; padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem;">
+            <!-- Chat history messages -->
+            <div style="background-color: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 10px; padding: 0.75rem; font-size: 0.8rem; line-height: 1.4; color: var(--text-main);">
+              Hello! I'm your Course AI Tutor. Ask me any question about the curriculum, lessons, or concepts covered in this course library, and I will search our vector database for exact answers.
+            </div>
+          </div>
+
+          <footer style="padding: 1rem; border-top: 1px solid var(--border-color); display: flex; gap: 0.5rem; background-color: var(--bg-secondary);">
+            <input type="text" id="chatbot-input" placeholder="Ask a question about the course..." style="flex-grow: 1; padding: 0.6rem; background-color: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-main); font-size: 0.85rem; font-family: var(--font-family);" />
+            <button id="btn-send-chatbot" class="btn-primary" style="padding: 0.5rem 1rem; font-size: 0.85rem;">
+              Send
+            </button>
+          </footer>
+        </div>
+        </div>
+      </div>
     </main>
   </div>
+
+  <!-- Markdown & Code Highlighting Libraries -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 
   <!-- JavaScript App Logic -->
   <script src="config.js"></script>

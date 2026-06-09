@@ -13,6 +13,18 @@ let flashcards = [];
 let currentCardIndex = 0;
 const pollingIntervals = new Map();
 
+// Course Portal State
+let courses = [];
+let activeCourse = null;
+let activeCourseLesson = null;
+let activeCourseModule = null;
+let courseFlashcards = [];
+let courseCurrentCardIndex = 0;
+let courseQuizQuestions = [];
+let courseQuizCurrentIndex = 0;
+let courseQuizScore = 0;
+let courseQuizAnswersSelected = [];
+
 // Interactive Quiz State
 let quizQuestions = [];
 let quizCurrentIndex = 0;
@@ -40,25 +52,29 @@ const syllabusContent = document.getElementById("syllabus-content");
 
 // Markdown Parser Helper
 function parseMarkdown(mdText) {
-  if (!mdText) return "<p class='text-muted'>No summary generated yet.</p>";
+  if (!mdText) return "<p class='text-muted'>No content available.</p>";
   
+  try {
+    if (window.marked) {
+      // Use marked package to parse markdown cleanly
+      return `<div class="markdown-body">${window.marked.parse(mdText)}</div>`;
+    }
+  } catch (e) {
+    console.error("Failed to parse markdown with marked library:", e);
+  }
+  
+  // Basic fallback parsing if marked isn't loaded yet
   let html = mdText
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
 
-  // Headings
   html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
   html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
   html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
-  
-  // Bold
   html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-  
-  // Blockquotes
   html = html.replace(/^\s*&gt;\s*(.*$)/gim, '<blockquote>$1</blockquote>');
   
-  // Bullet points
   let lines = html.split('\n');
   let inList = false;
   for (let i = 0; i < lines.length; i++) {
@@ -78,14 +94,10 @@ function parseMarkdown(mdText) {
       }
     }
   }
-  if (inList) {
-    lines.push('</ul>');
-  }
-  html = lines.join('\n');
+  if (inList) lines.push('</ul>');
+  html = lines.join('\n').replace(/\n/g, '<br>');
   
-  // Line breaks
-  html = html.replace(/\n/g, '<br>');
-  return html;
+  return `<div class="markdown-body">${html}</div>`;
 }
 
 // Q&A Parser Helper
@@ -608,6 +620,13 @@ function renderLearningAssets(source) {
     updateFlashcardView();
     
     switchTab('summary');
+    
+    // Highlight code blocks inside summary and takeaways
+    if (window.hljs) {
+      document.querySelectorAll('#summary-text pre code, #takeaways-text pre code').forEach((block) => {
+        window.hljs.highlightElement(block);
+      });
+    }
   } catch (err) {
     console.error("Error in renderLearningAssets:", err);
   }
@@ -1311,3 +1330,722 @@ window.selectVideo = async function(videoUri) {
   }
   return _origSelectVideoForMobile(videoUri);
 };
+
+// ==========================================================
+// COURSE PORTAL IMPLEMENTATION
+// ==========================================================
+
+const navBtnAnalyzer = document.getElementById("nav-btn-analyzer");
+const navBtnCourses = document.getElementById("nav-btn-courses");
+const analyzerSidebarContents = document.getElementById("analyzer-sidebar-contents");
+const coursesSidebarContents = document.getElementById("courses-sidebar-contents");
+const analyzerWorkspaceContainer = document.getElementById("analyzer-workspace-container");
+const coursesWorkspaceContainer = document.getElementById("courses-workspace-container");
+
+function switchToAnalyzer() {
+  navBtnAnalyzer.classList.add("active");
+  navBtnCourses.classList.remove("active");
+  
+  analyzerSidebarContents.classList.remove("hidden");
+  coursesSidebarContents.classList.add("hidden");
+  analyzerWorkspaceContainer.classList.remove("hidden");
+  coursesWorkspaceContainer.classList.add("hidden");
+}
+
+function switchToCourses() {
+  navBtnCourses.classList.add("active");
+  navBtnAnalyzer.classList.remove("active");
+  
+  coursesSidebarContents.classList.remove("hidden");
+  analyzerSidebarContents.classList.add("hidden");
+  coursesWorkspaceContainer.classList.remove("hidden");
+  analyzerWorkspaceContainer.classList.add("hidden");
+  
+  loadCourses();
+}
+
+navBtnAnalyzer.addEventListener("click", switchToAnalyzer);
+navBtnCourses.addEventListener("click", switchToCourses);
+
+async function loadCourses() {
+  const coursesGrid = document.getElementById("courses-grid");
+  const coursesSidebarList = document.getElementById("courses-sidebar-list");
+  const courseCountBadge = document.getElementById("course-count-badge");
+  
+  coursesGrid.innerHTML = `<div class="loading-spinner-small">Loading courses...</div>`;
+  coursesSidebarList.innerHTML = `<div class="loading-spinner-small">Loading navigator...</div>`;
+  
+  try {
+    const data = await queryGraphQL(`
+      query ListCourses {
+        listCourses {
+          courseId
+          title
+          description
+          image
+          difficulty
+          frameworks
+          aws_services
+          publish
+          featured
+          modules {
+            moduleId
+            title
+            order
+            lessons {
+              lessonId
+              title
+              description
+              order
+              videoUri
+              summary
+              qa
+              flashcards
+              content
+            }
+          }
+        }
+      }
+    `);
+    
+    courses = data.listCourses || [];
+    courseCountBadge.textContent = courses.length;
+    
+    renderCourses();
+  } catch (err) {
+    console.error("Error loading courses:", err);
+    coursesGrid.innerHTML = `<div class="loading-spinner-small" style="color: var(--status-failed)">Failed to load courses.</div>`;
+    coursesSidebarList.innerHTML = `<div class="loading-spinner-small" style="color: var(--status-failed)">Failed to load.</div>`;
+  }
+}
+
+function renderCourses() {
+  const coursesGrid = document.getElementById("courses-grid");
+  const coursesSidebarList = document.getElementById("courses-sidebar-list");
+  
+  if (courses.length === 0) {
+    coursesGrid.innerHTML = `<p class="text-muted">No courses found. Please run ingestion to index your curriculum.</p>`;
+    coursesSidebarList.innerHTML = `<p class="text-muted">No courses indexed.</p>`;
+    return;
+  }
+  
+  // 1. Render Grid
+  coursesGrid.innerHTML = courses.map(course => {
+    const difficultyClass = `difficulty-${course.difficulty?.toLowerCase() || 'intermediate'}`;
+    const frameworkTag = course.frameworks && course.frameworks.length > 0 ? course.frameworks[0] : "AWS";
+    
+    return `
+      <div class="course-card" onclick="selectCourse('${course.courseId}')">
+        <div class="course-card-body">
+          <h3>${course.title}</h3>
+          <p>${course.description || 'No description available.'}</p>
+        </div>
+        <div class="course-card-footer">
+          <span class="course-tag">${frameworkTag}</span>
+          <span class="course-difficulty-badge ${difficultyClass}">${course.difficulty || 'Intermediate'}</span>
+        </div>
+      </div>
+    `;
+  }).join("");
+  
+  // 2. Render Sidebar list
+  coursesSidebarList.innerHTML = courses.map(course => {
+    const isActive = activeCourse && activeCourse.courseId === course.courseId;
+    return `
+      <div class="video-item ${isActive ? 'active' : ''}" onclick="selectCourse('${course.courseId}')">
+        <div class="video-item-name">${course.title}</div>
+        <div class="video-item-meta">
+          <span>${course.modules?.length || 0} Modules</span>
+          <span>${course.difficulty || 'Intermediate'}</span>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+window.selectCourse = function(courseId) {
+  const course = courses.find(c => c.courseId === courseId);
+  if (!course) return;
+  
+  activeCourse = course;
+  activeCourseLesson = null;
+  activeCourseModule = null;
+  
+  // Toggle details view
+  document.getElementById("course-library-view").classList.add("hidden");
+  document.getElementById("course-detail-view").classList.remove("hidden");
+  
+  // Update Header Info
+  document.getElementById("active-course-title").textContent = course.title;
+  document.getElementById("active-course-desc").textContent = course.description || '';
+  
+  const diffBadge = document.getElementById("active-course-difficulty");
+  diffBadge.textContent = course.difficulty || 'Intermediate';
+  diffBadge.className = `status-badge difficulty-${course.difficulty?.toLowerCase() || 'intermediate'}`;
+  
+  // Render Sidebar Highlight
+  renderCourses();
+  
+  // Render Course Syllabus
+  renderCourseSyllabus();
+  
+  // Render Default Lesson View (Overview)
+  renderLessonDetails(null);
+};
+
+function renderCourseSyllabus() {
+  const container = document.getElementById("course-syllabus-content");
+  if (!activeCourse || !activeCourse.modules) {
+    container.innerHTML = `<p class="text-muted">No modules in this course.</p>`;
+    return;
+  }
+  
+  let html = `
+    <button class="lesson-item-btn ${activeCourseLesson === null ? 'active' : ''}" onclick="selectCourseLesson(null, null)">
+      <div class="lesson-info">
+        <div class="lesson-title-text">📚 Course Overview</div>
+        <div class="lesson-desc-text">Read course introduction and overview.</div>
+      </div>
+      <span class="lesson-time-badge">Overview</span>
+    </button>
+  `;
+  
+  activeCourse.modules.forEach(mod => {
+    html += `
+      <div class="module-group" style="margin-top: 1rem;">
+        <div class="module-header" style="font-weight:700; color:var(--text-bright); font-size:0.8rem; margin-bottom:0.5rem; text-transform:uppercase; letter-spacing:0.5px;">📦 Module: ${mod.title}</div>
+        ${(mod.lessons || []).map(lesson => {
+          const isActive = activeCourseLesson && activeCourseLesson.lessonId === lesson.lessonId;
+          return `
+            <button class="lesson-item-btn ${isActive ? 'active' : ''}" onclick="selectCourseLesson('${mod.moduleId}', '${lesson.lessonId}')">
+              <div class="lesson-info">
+                <div class="lesson-title-text">📖 ${lesson.title}</div>
+                <div class="lesson-desc-text">${lesson.description || 'No description available.'}</div>
+              </div>
+              <span class="lesson-time-badge">Lesson</span>
+            </button>
+          `;
+        }).join("")}
+      </div>
+    `;
+  });
+  
+  container.innerHTML = html;
+}
+
+window.selectCourseLesson = function(moduleId, lessonId) {
+  if (!activeCourse) return;
+  
+  if (!moduleId || !lessonId) {
+    activeCourseLesson = null;
+    activeCourseModule = null;
+  } else {
+    const mod = activeCourse.modules.find(m => m.moduleId === moduleId);
+    const lesson = mod ? mod.lessons.find(l => l.lessonId === lessonId) : null;
+    
+    activeCourseLesson = lesson;
+    activeCourseModule = mod;
+  }
+  
+  // Update active button classes in DOM
+  renderCourseSyllabus();
+  
+  // Render lesson content
+  renderLessonDetails(activeCourseLesson);
+};
+
+let activeLessonTabName = "content";
+
+function renderLessonDetails(lesson) {
+  const contentTab = document.getElementById("tab-lesson-content");
+  const quizTab = document.getElementById("tab-lesson-quiz");
+  const fsTab = document.getElementById("tab-lesson-flashcards");
+  
+  // Reset tabs selection to Content
+  switchLessonTab("content");
+  
+  const videoContainer = document.getElementById("lesson-video-container");
+  const videoPlayer = document.getElementById("lesson-video-player");
+  const mdBody = document.getElementById("lesson-body-markdown");
+  
+  if (!lesson) {
+    // Render course overview
+    videoContainer.classList.add("hidden");
+    videoPlayer.src = "";
+    
+    mdBody.innerHTML = `
+      <h1>${activeCourse.title}</h1>
+      <blockquote>${activeCourse.description || 'No overview description.'}</blockquote>
+      <h2>Course Outline</h2>
+      <p>This course consists of ${activeCourse.modules?.length || 0} modules. Navigate through the curriculum on the left panel to begin reading lessons and testing your knowledge.</p>
+      <h3>AI Tutor Chat</h3>
+      <p>You can chat with our AI Course Tutor at any time. Simply click the <strong>"💬 Ask Tutor"</strong> button in the header. S3Vectors RAG chatbot is fully indexed with the contents of this course.</p>
+    `;
+    
+    // Hide Quiz & Flashcard tabs for course level
+    quizTab.classList.add("hidden");
+    fsTab.classList.add("hidden");
+    return;
+  }
+  
+  // Render specific lesson
+  quizTab.classList.remove("hidden");
+  fsTab.classList.remove("hidden");
+  
+  // 1. Play Lesson video if exists
+  if (lesson.videoUri) {
+    videoContainer.classList.remove("hidden");
+    videoPlayer.src = lesson.videoUri;
+  } else {
+    videoContainer.classList.add("hidden");
+    videoPlayer.src = "";
+  }
+  
+  // 2. Render Markdown content
+  mdBody.innerHTML = `
+    <h1>${lesson.title}</h1>
+    <div style="margin-bottom: 1.5rem;">${parseMarkdown(lesson.content)}</div>
+  `;
+  
+  // 3. Render Quiz
+  renderCourseLessonQuiz(lesson);
+  
+  // 4. Render Flashcards
+  renderCourseLessonFlashcards(lesson);
+  
+  // Highlight code blocks inside lesson body
+  if (window.hljs) {
+    mdBody.querySelectorAll('pre code').forEach((block) => {
+      window.hljs.highlightElement(block);
+    });
+  }
+}
+
+window.switchLessonTab = function(tabName) {
+  activeLessonTabName = tabName;
+  document.querySelectorAll("#course-detail-view .tabs-nav .tab-button").forEach(btn => {
+    btn.classList.remove("active");
+  });
+  document.querySelectorAll("#course-detail-view .tab-contents .tab-pane").forEach(pane => {
+    pane.classList.remove("active");
+  });
+  
+  document.getElementById(`tab-lesson-${tabName}`).classList.add("active");
+  document.getElementById(`content-lesson-${tabName}`).classList.add("active");
+};
+
+function renderCourseLessonQuiz(lesson) {
+  const generatorSection = document.getElementById("lesson-quiz-generator-section");
+  const quizContainer = document.getElementById("lesson-quiz-container");
+  
+  if (!lesson.qa) {
+    generatorSection.classList.remove("hidden");
+    quizContainer.classList.add("hidden");
+    return;
+  }
+  
+  generatorSection.classList.add("hidden");
+  quizContainer.classList.remove("hidden");
+  
+  // Initialize Quiz state
+  try {
+    courseQuizQuestions = JSON.parse(lesson.qa);
+  } catch (e) {
+    courseQuizQuestions = parseQA(lesson.qa);
+  }
+  
+  courseQuizCurrentIndex = 0;
+  courseQuizScore = 0;
+  courseQuizAnswersSelected = new Array(courseQuizQuestions.length).fill(null);
+  
+  renderCourseQuizPage();
+}
+
+function renderCourseQuizPage() {
+  const container = document.getElementById("lesson-quiz-container");
+  if (!container) return;
+  
+  if (courseQuizCurrentIndex >= courseQuizQuestions.length) {
+    // Result screen
+    const percent = Math.round((courseQuizScore / courseQuizQuestions.length) * 100);
+    let gradeMsg = "Excellent job! 🎉";
+    if (percent < 50) gradeMsg = "Keep practicing! 📚";
+    else if (percent < 80) gradeMsg = "Great effort! 👍";
+    
+    container.innerHTML = `
+      <div class="quiz-results-card">
+        <h3>🏆 Quiz Completed!</h3>
+        <div class="quiz-score-circle">
+          <div class="score-number">${courseQuizScore} / ${courseQuizQuestions.length}</div>
+          <div class="score-percent">${percent}%</div>
+        </div>
+        <p class="quiz-grade-msg">${gradeMsg}</p>
+        
+        <div class="quiz-summary-list">
+          ${courseQuizQuestions.map((q, idx) => {
+            const isCorrect = courseQuizAnswersSelected[idx] === q.correctIndex;
+            const selectedText = q.options ? (q.options[courseQuizAnswersSelected[idx]] || "No answer") : "Answered";
+            return `
+              <div class="quiz-summary-item ${isCorrect ? 'correct' : 'incorrect'}">
+                <div class="summary-q-header">
+                  <span class="summary-status-icon">${isCorrect ? '✅' : '❌'}</span>
+                  <strong>Q${idx + 1}: ${q.question}</strong>
+                </div>
+                <div class="summary-q-body">
+                  <div class="summary-text">Your answer: <span class="selected-ans">${selectedText}</span></div>
+                  ${!isCorrect && q.options ? `<div class="summary-text">Correct answer: <span class="correct-ans">${q.options[q.correctIndex]}</span></div>` : ''}
+                  ${q.explanation ? `<div style="margin-top: 0.25rem; font-style: italic; color: var(--text-muted);">Explanation: ${q.explanation}</div>` : ''}
+                </div>
+              </div>
+            `;
+          }).join("")}
+        </div>
+        
+        <button class="btn-quiz-retry" onclick="restartCourseQuiz()">🔄 Restart Quiz</button>
+      </div>
+    `;
+    return;
+  }
+  
+  const currentQ = courseQuizQuestions[courseQuizCurrentIndex];
+  const progressPercent = Math.round((courseQuizCurrentIndex / courseQuizQuestions.length) * 100);
+  const selectedOption = courseQuizAnswersSelected[courseQuizCurrentIndex];
+  const hasAnswered = selectedOption !== null;
+  
+  if (!currentQ.options && currentQ.answer) {
+    currentQ.options = [currentQ.answer, "Option B", "Option C", "Option D"];
+    currentQ.correctIndex = 0;
+  }
+  
+  if (currentQ.correctIndex === undefined) {
+    const idx = currentQ.options.findIndex(opt => opt === currentQ.answer);
+    currentQ.correctIndex = idx !== -1 ? idx : 0;
+  }
+  
+  container.innerHTML = `
+     <div class="quiz-card">
+       <div class="quiz-progress-container">
+         <div class="quiz-progress-bar" style="width: ${progressPercent}%"></div>
+       </div>
+       <div class="quiz-card-header">
+         <span class="quiz-question-num">Question ${courseQuizCurrentIndex + 1} of ${courseQuizQuestions.length}</span>
+         <span class="quiz-score-badge">Score: ${courseQuizScore}</span>
+       </div>
+       <h3 class="quiz-question-text">${currentQ.question}</h3>
+       
+       <div class="quiz-options-list">
+         ${currentQ.options.map((opt, idx) => {
+           const letter = String.fromCharCode(65 + idx);
+           let optClass = "";
+           let statusIcon = "";
+           
+           if (hasAnswered) {
+             if (idx === currentQ.correctIndex) {
+               optClass = "correct";
+               statusIcon = "✅";
+             } else if (idx === selectedOption) {
+               optClass = "incorrect";
+               statusIcon = "❌";
+             } else {
+               optClass = "disabled";
+             }
+           }
+           
+           return `
+             <button class="quiz-option-btn ${optClass}" onclick="selectCourseQuizOption(${idx})" ${hasAnswered ? 'disabled' : ''}>
+               <span class="option-letter">${letter}</span>
+               <span class="option-text">${opt}</span>
+               <span class="option-status-icon">${statusIcon}</span>
+             </button>
+           `;
+         }).join("")}
+       </div>
+       
+       ${hasAnswered ? `
+         <div class="quiz-actions" style="margin-top: 1rem;">
+           <button class="quiz-next-btn" onclick="nextCourseQuizQuestion()" style="width: 100%; padding: 0.75rem; border-radius: 8px; font-weight: 600; cursor: pointer; background: var(--accent-gradient); color: var(--text-bright); border: none;">
+             ${courseQuizCurrentIndex === courseQuizQuestions.length - 1 ? '🏁 Finish Quiz' : '➡️ Next Question'}
+           </button>
+         </div>
+       ` : ''}
+     </div>
+  `;
+}
+
+window.selectCourseQuizOption = function(optionIndex) {
+  if (courseQuizAnswersSelected[courseQuizCurrentIndex] !== null) return;
+  courseQuizAnswersSelected[courseQuizCurrentIndex] = optionIndex;
+  if (optionIndex === courseQuizQuestions[courseQuizCurrentIndex].correctIndex) {
+    courseQuizScore++;
+  }
+  renderCourseQuizPage();
+};
+
+window.nextCourseQuizQuestion = function() {
+  courseQuizCurrentIndex++;
+  renderCourseQuizPage();
+};
+
+window.restartCourseQuiz = function() {
+  courseQuizCurrentIndex = 0;
+  courseQuizScore = 0;
+  courseQuizAnswersSelected = new Array(courseQuizQuestions.length).fill(null);
+  renderCourseQuizPage();
+};
+
+function renderCourseLessonFlashcards(lesson) {
+  const generatorSection = document.getElementById("lesson-fc-generator-section");
+  const fcContainer = document.getElementById("lesson-flashcards-container");
+  
+  if (!lesson.flashcards) {
+    generatorSection.classList.remove("hidden");
+    fcContainer.classList.add("hidden");
+    return;
+  }
+  
+  generatorSection.classList.add("hidden");
+  fcContainer.classList.remove("hidden");
+  
+  try {
+    courseFlashcards = JSON.parse(lesson.flashcards);
+  } catch (e) {
+    courseFlashcards = parseFlashcards(lesson.flashcards);
+  }
+  
+  courseCurrentCardIndex = 0;
+  updateCourseFlashcardView();
+}
+
+function updateCourseFlashcardView() {
+  const cardContainer = document.getElementById("lesson-current-card");
+  const frontText = document.getElementById("lesson-card-front-text");
+  const backText = document.getElementById("lesson-card-back-text");
+  const counterText = document.getElementById("lesson-card-counter");
+  
+  cardContainer.classList.remove("flipped");
+  
+  if (courseFlashcards.length === 0) {
+    frontText.textContent = "No flashcards generated.";
+    backText.textContent = "No flashcards generated.";
+    counterText.textContent = "0 / 0";
+    return;
+  }
+  
+  const activeCard = courseFlashcards[courseCurrentCardIndex];
+  frontText.textContent = activeCard.front;
+  backText.textContent = activeCard.back;
+  counterText.textContent = `${courseCurrentCardIndex + 1} / ${courseFlashcards.length}`;
+}
+
+window.flipLessonCard = function() {
+  document.getElementById("lesson-current-card").classList.toggle("flipped");
+};
+
+window.prevLessonCard = function() {
+  if (courseFlashcards.length === 0) return;
+  courseCurrentCardIndex = (courseCurrentCardIndex - 1 + courseFlashcards.length) % courseFlashcards.length;
+  updateCourseFlashcardView();
+};
+
+window.nextLessonCard = function() {
+  if (courseFlashcards.length === 0) return;
+  courseCurrentCardIndex = (courseCurrentCardIndex + 1) % courseFlashcards.length;
+  updateCourseFlashcardView();
+};
+
+// Generate Quiz Trigger
+document.getElementById("btn-generate-quiz").addEventListener("click", async () => {
+  if (!activeCourse || !activeCourseLesson) return;
+  const btn = document.getElementById("btn-generate-quiz");
+  btn.disabled = true;
+  btn.textContent = "Generating Quiz with AI... ⏳";
+  
+  try {
+    const res = await queryGraphQL(`
+      mutation GenerateQuizForLesson($courseId: String!, $moduleId: String!, $lessonId: String!) {
+        generateQuizForLesson(courseId: $courseId, moduleId: $moduleId, lessonId: $lessonId)
+      }
+    `, {
+      courseId: activeCourse.courseId,
+      moduleId: activeCourseModule.moduleId,
+      lessonId: activeCourseLesson.lessonId
+    });
+    
+    if (res.generateQuizForLesson) {
+      activeCourseLesson.qa = res.generateQuizForLesson;
+      renderCourseLessonQuiz(activeCourseLesson);
+    }
+  } catch (err) {
+    alert("Failed to generate quiz: " + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "✨ Generate Quiz with Nova";
+  }
+});
+
+// Generate Flashcards Trigger
+document.getElementById("btn-generate-flashcards").addEventListener("click", async () => {
+  if (!activeCourse || !activeCourseLesson) return;
+  const btn = document.getElementById("btn-generate-flashcards");
+  btn.disabled = true;
+  btn.textContent = "Generating Flashcards with AI... ⏳";
+  
+  try {
+    const res = await queryGraphQL(`
+      mutation GenerateFlashcardsForLesson($courseId: String!, $moduleId: String!, $lessonId: String!) {
+        generateFlashcardsForLesson(courseId: $courseId, moduleId: $moduleId, lessonId: $lessonId)
+      }
+    `, {
+      courseId: activeCourse.courseId,
+      moduleId: activeCourseModule.moduleId,
+      lessonId: activeCourseLesson.lessonId
+    });
+    
+    if (res.generateFlashcardsForLesson) {
+      activeCourseLesson.flashcards = res.generateFlashcardsForLesson;
+      renderCourseLessonFlashcards(activeCourseLesson);
+    }
+  } catch (err) {
+    alert("Failed to generate flashcards: " + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "✨ Generate Flashcards with Nova";
+  }
+});
+
+// Chatbot Toggle Drawer Panel
+const btnToggleChatbot = document.getElementById("btn-toggle-chatbot");
+const btnCloseChatbot = document.getElementById("btn-close-chatbot");
+const chatbotDrawer = document.getElementById("course-chatbot-drawer");
+const btnSendChatbot = document.getElementById("btn-send-chatbot");
+const chatbotInput = document.getElementById("chatbot-input");
+const chatbotMessages = document.getElementById("chatbot-messages");
+
+btnToggleChatbot.addEventListener("click", () => {
+  chatbotDrawer.classList.toggle("chatbot-drawer-open");
+});
+
+btnCloseChatbot.addEventListener("click", () => {
+  chatbotDrawer.classList.remove("chatbot-drawer-open");
+});
+
+btnSendChatbot.addEventListener("click", sendChatbotMessage);
+chatbotInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    sendChatbotMessage();
+  }
+});
+
+async function sendChatbotMessage() {
+  const text = chatbotInput.value.trim();
+  if (!text) return;
+  
+  chatbotInput.value = "";
+  
+  chatbotMessages.innerHTML += `
+    <div class="chat-msg chat-msg-user">
+      ${text}
+    </div>
+  `;
+  chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
+  
+  const typingId = "typing-" + Date.now();
+  chatbotMessages.innerHTML += `
+    <div class="chat-msg chat-msg-bot chat-msg-typing" id="${typingId}">
+      <span class="chat-dot"></span>
+      <span class="chat-dot"></span>
+      <span class="chat-dot"></span>
+    </div>
+  `;
+  chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
+  
+  try {
+    const data = await queryGraphQL(`
+      query AskCourseChatbot($courseId: String, $message: String!) {
+        askCourseChatbot(courseId: $courseId, message: $message)
+      }
+    `, {
+      courseId: activeCourse ? activeCourse.courseId : null,
+      message: text
+    });
+    
+    const typingIndicator = document.getElementById(typingId);
+    if (typingIndicator) typingIndicator.remove();
+    
+    const answer = data.askCourseChatbot || "No response received.";
+    const responseId = "bot-msg-" + Date.now();
+    chatbotMessages.innerHTML += `
+      <div class="chat-msg chat-msg-bot" id="${responseId}">
+        ${parseMarkdown(answer)}
+      </div>
+    `;
+    chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
+    
+    // Highlight code blocks inside the new chatbot response
+    if (window.hljs) {
+      const msgEl = document.getElementById(responseId);
+      if (msgEl) {
+        msgEl.querySelectorAll('pre code').forEach((block) => {
+          window.hljs.highlightElement(block);
+        });
+      }
+    }
+  } catch (err) {
+    const typingIndicator = document.getElementById(typingId);
+    if (typingIndicator) typingIndicator.remove();
+    chatbotMessages.innerHTML += `
+      <div class="chat-msg chat-msg-error">
+        Failed to connect to Course Tutor: ${err.message}
+      </div>
+    `;
+    chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
+  }
+}
+
+// Course Back Button
+document.getElementById("btn-course-back").addEventListener("click", () => {
+  document.getElementById("course-library-view").classList.remove("hidden");
+  document.getElementById("course-detail-view").classList.add("hidden");
+  activeCourse = null;
+  activeCourseLesson = null;
+  activeCourseModule = null;
+  chatbotDrawer.classList.remove("chatbot-drawer-open");
+  renderCourses();
+});
+
+// Admin Ingest trigger
+document.getElementById("btn-admin-ingest").addEventListener("click", async () => {
+  const ok = confirm("Are you sure you want to trigger course curriculum ingestion?\nThis will parse all courses from the local zip file, generate Titan embeddings for lessons, index S3Vectors, and write metadata to DynamoDB. This runs as a background Durable Function.");
+  if (!ok) return;
+  
+  const btn = document.getElementById("btn-admin-ingest");
+  btn.disabled = true;
+  btn.textContent = "Triggering Ingestion... ⏳";
+  
+  try {
+    const res = await queryGraphQL(`
+      mutation TriggerCourseIngestion($s3ZipKey: String!) {
+        triggerCourseIngestion(s3ZipKey: $s3ZipKey)
+      }
+    `, {
+      s3ZipKey: "raw-courses/courses.zip"
+    });
+    
+    if (res.triggerCourseIngestion) {
+      alert("Ingestion triggered successfully! The Durable Ingestion Orchestrator is running. Please check S3 / DynamoDB and the Durable function Lambda logs in a few minutes.");
+    } else {
+      alert("GraphQL returned failure for triggerCourseIngestion.");
+    }
+  } catch (err) {
+    alert("Failed to trigger ingestion: " + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "⚙️ Ingest Courses";
+  }
+});
+
+// Initialize switcher hook
+document.addEventListener("DOMContentLoaded", () => {
+  switchToAnalyzer();
+});
+

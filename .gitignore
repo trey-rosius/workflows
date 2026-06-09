@@ -21,6 +21,9 @@ __pycache__/
 *.pyc
 **/*.pyc
 cdk-outputs.json
+courses/
+.agents/
+
 
 
 

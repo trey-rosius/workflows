@@ -1,9 +1,8 @@
-import { SFNClient, StartExecutionCommand } from "@aws-sdk/client-sfn";
+import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
 import { S3Event } from "aws-lambda";
 
-const sfnClient = new SFNClient({});
-const stateMachineArn = process.env.STATE_MACHINE_ARN!;
-const sourceBucketName = process.env.SOURCE_BUCKET_NAME!;
+const lambdaClient = new LambdaClient({});
+const durableOrchestratorArn = process.env.DURABLE_ORCHESTRATOR_ARN!;
 
 export const handler = async (event: S3Event) => {
   console.log("Received S3 event:", JSON.stringify(event));
@@ -14,25 +13,26 @@ export const handler = async (event: S3Event) => {
 
     // e.g. s3://my-bucket/videos/file.mp4
     const mediaFileUri = `s3://${bucketName}/${objectKey}`;
-    // Save Bedrock output files under embeddings/ in the same bucket
-    const mediaBucket = `s3://${bucketName}/embeddings/`;
 
-    console.log(`Starting step functions for ${mediaFileUri} in bucket ${mediaBucket}`);
+    console.log(`Invoking Durable Orchestrator ${durableOrchestratorArn} for ${mediaFileUri}`);
 
     try {
-      const command = new StartExecutionCommand({
-        stateMachineArn: stateMachineArn,
-        input: JSON.stringify({
-          mediaFileUri: mediaFileUri,
-          mediaBucket: mediaBucket,
-        }),
+      const command = new InvokeCommand({
+        FunctionName: durableOrchestratorArn,
+        InvocationType: "Event", // Asynchronous invocation
+        Payload: Buffer.from(
+          JSON.stringify({
+            mediaFileUri: mediaFileUri,
+          })
+        ),
       });
 
-      const response = await sfnClient.send(command);
-      console.log("Successfully started Step Functions execution:", response.executionArn);
+      const response = await lambdaClient.send(command);
+      console.log("Successfully invoked Durable Orchestrator:", response.StatusCode);
     } catch (error) {
-      console.error("Error starting execution:", error);
+      console.error("Error invoking Durable Orchestrator:", error);
       throw error;
     }
   }
 };
+

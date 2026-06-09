@@ -97,6 +97,42 @@ type Mutation {
     callbackId: String
     videoUrl: String
   ): VideoStatus @aws_iam @aws_api_key @aws_cognito_user_pools
+
+  triggerCourseIngestion(s3ZipKey: String!): Boolean! @aws_api_key @aws_cognito_user_pools
+  generateQuizForLesson(courseId: String!, moduleId: String!, lessonId: String!): String! @aws_api_key @aws_cognito_user_pools
+  generateFlashcardsForLesson(courseId: String!, moduleId: String!, lessonId: String!): String! @aws_api_key @aws_cognito_user_pools
+}
+
+type CourseAssets @aws_api_key @aws_cognito_user_pools {
+  courseId: String!
+  title: String!
+  description: String
+  image: String
+  difficulty: String
+  frameworks: [String]
+  aws_services: [String]
+  publish: Boolean
+  featured: Boolean
+  modules: [ModuleItem]
+}
+
+type ModuleItem @aws_api_key @aws_cognito_user_pools {
+  moduleId: String!
+  title: String!
+  order: Int!
+  lessons: [LessonItem]
+}
+
+type LessonItem @aws_api_key @aws_cognito_user_pools {
+  lessonId: String!
+  title: String!
+  description: String
+  order: Int!
+  videoUri: String
+  summary: String
+  qa: String
+  flashcards: String
+  content: String
 }
 
 type Query {
@@ -104,6 +140,9 @@ type Query {
   getVideoAssets(videoUri: String!): VideoAssets @aws_api_key @aws_cognito_user_pools
   getVideoUrl(videoUri: String!): String @aws_api_key @aws_cognito_user_pools
   listVideoAssets: [VideoAssets] @aws_api_key @aws_cognito_user_pools
+  listCourses: [CourseAssets] @aws_api_key @aws_cognito_user_pools
+  getCourse(courseId: String!): CourseAssets @aws_api_key @aws_cognito_user_pools
+  askCourseChatbot(courseId: String, message: String!): String! @aws_api_key @aws_cognito_user_pools
 }
 
 type Subscription {

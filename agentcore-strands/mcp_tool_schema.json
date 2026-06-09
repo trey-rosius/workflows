@@ -1,0 +1,32 @@
+[
+  {
+    "name": "save_course_draft",
+    "description": "Persist the generated video course syllabus and lessons metadata to the database.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "mediaFileUri": {
+          "type": "string",
+          "description": "The unique S3 URI of the source video."
+        },
+        "title": {
+          "type": "string",
+          "description": "The title of the video course."
+        },
+        "description": {
+          "type": "string",
+          "description": "A description of the course."
+        },
+        "global_assets": {
+          "type": "object",
+          "description": "Global course assets including summary, qa, flashcards, and keyTakeaways."
+        },
+        "lessons": {
+          "type": "array",
+          "description": "List of lessons, each wrapped in a lesson object with start/end times and generated assets."
+        }
+      },
+      "required": ["mediaFileUri", "global_assets", "lessons"]
+    }
+  }
+]
