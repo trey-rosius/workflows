@@ -115,6 +115,67 @@ export class AppSyncConstruct extends Construct {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
+    const chatSessionsTable = new dynamodb.Table(this, "ChatSessionsTable", {
+      tableName: `${cdk.Stack.of(this).account}-${cdk.Stack.of(this).region}-chat-sessions-table`,
+      partitionKey: { name: "sessionId", type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
+    const contentDemandTelemetryTable = new dynamodb.Table(this, "ContentDemandTelemetryTable", {
+      tableName: `${cdk.Stack.of(this).account}-${cdk.Stack.of(this).region}-content-demand-telemetry`,
+      partitionKey: { name: "requestId", type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
+    const chatEvaluationsTable = new dynamodb.Table(this, "ChatEvaluationsTable", {
+      tableName: `${cdk.Stack.of(this).account}-${cdk.Stack.of(this).region}-chat-evaluations-table`,
+      partitionKey: { name: "evaluationId", type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
+    const tutorGuardrail = new bedrock.CfnGuardrail(this, "TutorGuardrail", {
+      name: `TutorGuardrail-${cdk.Stack.of(this).stackName}-${cdk.Stack.of(this).region}`,
+      description: "Guardrails for Educloud Tutor Agent",
+      blockedInputMessaging: "I am an educational tutor and can only assist with curriculum-related questions.",
+      blockedOutputsMessaging: "I am an educational tutor and can only assist with curriculum-related questions.",
+      topicPolicyConfig: {
+        topicsConfig: [
+          {
+            name: "Politics",
+            definition: "Any discussion, opinions, or queries regarding politics, election campaigns, candidates, or government policies unrelated to cloud computing.",
+            type: "DENY"
+          },
+          {
+            name: "Financial Advice",
+            definition: "Providing financial recommendations, investment advice, stock predictions, or commercial business advice.",
+            type: "DENY"
+          },
+          {
+            name: "Non-Educational Software Development",
+            definition: "Requests to build complete commercial products, write production-grade systems, develop software for personal business startups, or general non-educational programming projects.",
+            type: "DENY"
+          }
+        ]
+      },
+      contentPolicyConfig: {
+        filtersConfig: [
+          { type: "PROMPT_ATTACK", inputStrength: "HIGH", outputStrength: "NONE" },
+          { type: "SEXUAL", inputStrength: "HIGH", outputStrength: "HIGH" },
+          { type: "VIOLENCE", inputStrength: "HIGH", outputStrength: "HIGH" },
+          { type: "HATE", inputStrength: "HIGH", outputStrength: "HIGH" },
+          { type: "INSULTS", inputStrength: "HIGH", outputStrength: "HIGH" }
+        ]
+      }
+    });
+
+    const tutorGuardrailVersion = new bedrock.CfnGuardrailVersion(this, "TutorGuardrailVersionV3", {
+      guardrailIdentifier: tutorGuardrail.attrGuardrailId,
+      description: "Updated version of TutorGuardrail with refined topics"
+    });
+
 
     const cognitoResources = new CognitoConstruct(this, "CognitoResources");
 
@@ -465,28 +526,72 @@ export class AppSyncConstruct extends Construct {
       handler: "handler",
       index: "ask_chatbot.py",
       runtime: lambda.Runtime.PYTHON_3_12,
-      timeout: cdk.Duration.seconds(30),
+      timeout: cdk.Duration.seconds(90),
       memorySize: 512,
       logGroup: askChatbotLogs,
       tracing: lambda.Tracing.ACTIVE,
       environment: {
         COURSES_TABLE_NAME: coursesTable.tableName,
+        CHAT_SESSIONS_TABLE_NAME: chatSessionsTable.tableName,
         VECTOR_BUCKET_NAME: vectorBucket.vectorBucketName,
         VECTOR_INDEX_NAME: vectorIndex.indexName,
+        CONTENT_DEMAND_TELEMETRY_TABLE_NAME: contentDemandTelemetryTable.tableName,
+        CHAT_EVALUATIONS_TABLE_NAME: chatEvaluationsTable.tableName,
+        TUTOR_GUARDRAIL_ID: tutorGuardrail.attrGuardrailId,
+        TUTOR_GUARDRAIL_VERSION: tutorGuardrailVersion.attrVersion,
+        APPSYNC_ENDPOINT: this.api.graphqlUrl,
+        APPSYNC_API_KEY: this.api.apiKey || "",
       },
     });
 
     coursesTable.grantReadData(askChatbotFunction);
+    chatSessionsTable.grantReadWriteData(askChatbotFunction);
+    contentDemandTelemetryTable.grantReadWriteData(askChatbotFunction);
+    chatEvaluationsTable.grantReadData(askChatbotFunction);
 
     askChatbotFunction.addToRolePolicy(
       new iam.PolicyStatement({
-        actions: ["s3vectors:QueryVectors", "s3vectors:GetIndex", "s3vectors:GetVectors"],
+        actions: ["s3vectors:QueryVectors", "s3vectors:GetIndex", "s3vectors:GetVectors", "s3vectors:PutVectors"],
         resources: ["*"],
         effect: iam.Effect.ALLOW,
       })
     );
 
     askChatbotFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["bedrock:InvokeModel", "bedrock:ApplyGuardrail", "bedrock:InvokeModelWithResponseStream"],
+        resources: ["*"],
+        effect: iam.Effect.ALLOW,
+      })
+    );
+
+    encryptionKey.grantDecrypt(askChatbotFunction);
+
+    // Overnight Evaluation LLM-as-a-Judge Lambda
+    const evaluateChatlogsLogs = new logs.LogGroup(this, "EvaluateChatlogsLogs", {
+      retention: logs.RetentionDays.ONE_WEEK,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
+    const evaluateChatlogsFunction = new PythonFunction(this, "evaluateChatlogsFunction", {
+      entry: "./src/py/",
+      handler: "handler",
+      index: "evaluate_chatlogs.py",
+      runtime: lambda.Runtime.PYTHON_3_12,
+      timeout: cdk.Duration.seconds(300),
+      memorySize: 512,
+      logGroup: evaluateChatlogsLogs,
+      tracing: lambda.Tracing.ACTIVE,
+      environment: {
+        CHAT_SESSIONS_TABLE_NAME: chatSessionsTable.tableName,
+        CHAT_EVALUATIONS_TABLE_NAME: chatEvaluationsTable.tableName,
+      },
+    });
+
+    chatSessionsTable.grantReadData(evaluateChatlogsFunction);
+    chatEvaluationsTable.grantReadWriteData(evaluateChatlogsFunction);
+
+    evaluateChatlogsFunction.addToRolePolicy(
       new iam.PolicyStatement({
         actions: ["bedrock:InvokeModel"],
         resources: ["*"],
@@ -494,7 +599,12 @@ export class AppSyncConstruct extends Construct {
       })
     );
 
-    encryptionKey.grantDecrypt(askChatbotFunction);
+    // Schedule daily overnight evaluation trigger at midnight
+    const dailyEvaluationRule = new events.Rule(this, "DailyEvaluationRule", {
+      schedule: events.Schedule.cron({ minute: "0", hour: "0" }),
+      description: "Trigger the LLM-as-a-Judge overnight evaluation daily at midnight"
+    });
+    dailyEvaluationRule.addTarget(new targets.LambdaFunction(evaluateChatlogsFunction));
 
     const generateContentFunction = new PythonFunction(this, "generateContentFunction", {
       entry: "./src/py/",
@@ -818,6 +928,14 @@ export class AppSyncConstruct extends Construct {
       code: appsync.Code.fromAsset("./resolvers/updateVideoStatus.js"),
     });
 
+    this.api.createResolver("PublishChatbotChunkResolver", {
+      typeName: "Mutation",
+      fieldName: "publishChatbotChunk",
+      runtime: appsync.FunctionRuntime.JS_1_0_0,
+      dataSource: noneDs,
+      code: appsync.Code.fromAsset("./resolvers/updateVideoStatus.js"),
+    });
+
     this.api
       .addLambdaDataSource("approveVideoDataSource", approveVideoFunction)
       .createResolver("approveVideoFunctionResolver", {
@@ -921,6 +1039,24 @@ export class AppSyncConstruct extends Construct {
     askChatbotDs.createResolver("AskCourseChatbotResolver", {
       typeName: "Query",
       fieldName: "askCourseChatbot",
+      code: appsync.Code.fromAsset(path.join(__dirname, "../resolvers/invoke/invoke.js")),
+      runtime: appsync.FunctionRuntime.JS_1_0_0,
+    });
+    askChatbotDs.createResolver("DemystifyJargonResolver", {
+      typeName: "Query",
+      fieldName: "demystifyJargon",
+      code: appsync.Code.fromAsset(path.join(__dirname, "../resolvers/invoke/invoke.js")),
+      runtime: appsync.FunctionRuntime.JS_1_0_0,
+    });
+    askChatbotDs.createResolver("GetContentDemandTelemetryResolver", {
+      typeName: "Query",
+      fieldName: "getContentDemandTelemetry",
+      code: appsync.Code.fromAsset(path.join(__dirname, "../resolvers/invoke/invoke.js")),
+      runtime: appsync.FunctionRuntime.JS_1_0_0,
+    });
+    askChatbotDs.createResolver("GetChatEvaluationsResolver", {
+      typeName: "Query",
+      fieldName: "getChatEvaluations",
       code: appsync.Code.fromAsset(path.join(__dirname, "../resolvers/invoke/invoke.js")),
       runtime: appsync.FunctionRuntime.JS_1_0_0,
     });

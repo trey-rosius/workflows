@@ -101,6 +101,7 @@ type Mutation {
   triggerCourseIngestion(s3ZipKey: String!): Boolean! @aws_api_key @aws_cognito_user_pools
   generateQuizForLesson(courseId: String!, moduleId: String!, lessonId: String!): String! @aws_api_key @aws_cognito_user_pools
   generateFlashcardsForLesson(courseId: String!, moduleId: String!, lessonId: String!): String! @aws_api_key @aws_cognito_user_pools
+  publishChatbotChunk(sessionId: String!, chunk: String!, isComplete: Boolean!): ChatbotChunk! @aws_api_key @aws_cognito_user_pools
 }
 
 type CourseAssets @aws_api_key @aws_cognito_user_pools {
@@ -142,13 +143,44 @@ type Query {
   listVideoAssets: [VideoAssets] @aws_api_key @aws_cognito_user_pools
   listCourses: [CourseAssets] @aws_api_key @aws_cognito_user_pools
   getCourse(courseId: String!): CourseAssets @aws_api_key @aws_cognito_user_pools
-  askCourseChatbot(courseId: String, message: String!): String! @aws_api_key @aws_cognito_user_pools
+  askCourseChatbot(courseId: String, message: String!, sessionId: String): String! @aws_api_key @aws_cognito_user_pools
+  demystifyJargon(term: String!): String! @aws_api_key @aws_cognito_user_pools
+  getContentDemandTelemetry: [ContentDemand!]! @aws_api_key @aws_cognito_user_pools
+  getChatEvaluations: [ChatEvaluation!]! @aws_api_key @aws_cognito_user_pools
+}
+
+type ContentDemand @aws_api_key @aws_cognito_user_pools {
+  requestId: String!
+  prompt: String!
+  timestamp: String!
+  detectedTopic: String
+}
+
+type ChatEvaluation @aws_api_key @aws_cognito_user_pools {
+  evaluationId: String!
+  sessionId: String!
+  userPrompt: String!
+  assistantResponse: String!
+  relevanceScore: Int!
+  politenessScore: Int!
+  adherenceScore: Int!
+  justification: String!
+  timestamp: String!
 }
 
 type Subscription {
   onVideoStatusUpdate: VideoStatus
     @aws_subscribe(mutations: ["updateVideoStatus"])
     @aws_api_key @aws_cognito_user_pools
+  onChatbotChunk(sessionId: String!): ChatbotChunk
+    @aws_subscribe(mutations: ["publishChatbotChunk"])
+    @aws_api_key @aws_cognito_user_pools
+}
+
+type ChatbotChunk @aws_api_key @aws_cognito_user_pools {
+  sessionId: String!
+  chunk: String!
+  isComplete: Boolean!
 }
 
 schema {

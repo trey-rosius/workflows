@@ -50,14 +50,77 @@ const btnWelcomeBrowse = document.getElementById("btn-welcome-browse");
 const videoCountBadge = document.getElementById("video-count-badge");
 const syllabusContent = document.getElementById("syllabus-content");
 
+// Jargon wrapping helper for DOM elements (avoids matching inside <pre>, <code> or formatting tags)
+function wrapJargonInElement(element) {
+  if (!element) return;
+  const terms = ["VPC", "SQS", "DynamoDB", "Lambda", "AppSync", "Cognito", "EventBridge", "SNS", "IAM", "CloudFront", "S3", "GraphQL", "REST"];
+  
+  const walker = document.createTreeWalker(
+    element,
+    NodeFilter.SHOW_TEXT,
+    {
+      acceptNode: function(node) {
+        let parent = node.parentNode;
+        while (parent && parent !== element) {
+          const tagName = parent.tagName.toLowerCase();
+          if (tagName === 'pre' || tagName === 'code' || parent.classList.contains('jargon-term')) {
+            return NodeFilter.FILTER_REJECT;
+          }
+          parent = parent.parentNode;
+        }
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    }
+  );
+
+  const textNodes = [];
+  while (walker.nextNode()) {
+    textNodes.push(walker.currentNode);
+  }
+
+  textNodes.forEach(node => {
+    let text = node.nodeValue;
+    let hasMatch = false;
+    let newText = text;
+    terms.forEach(term => {
+      const regex = new RegExp(`\\b(${term})\\b`, "gi");
+      if (regex.test(newText)) {
+        hasMatch = true;
+        newText = newText.replace(regex, `<span class="jargon-term" data-term="$1">$1</span>`);
+      }
+    });
+
+    if (hasMatch) {
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = newText;
+      const parent = node.parentNode;
+      while (tempDiv.firstChild) {
+        parent.insertBefore(tempDiv.firstChild, node);
+      }
+      parent.removeChild(node);
+    }
+  });
+}
+
+// Jargon wrapping helper
+function wrapJargonTerms(html) {
+  const terms = ["VPC", "SQS", "DynamoDB", "Lambda", "AppSync", "Cognito", "EventBridge", "SNS", "IAM", "CloudFront", "S3", "GraphQL", "REST"];
+  let result = html;
+  terms.forEach(term => {
+    const regex = new RegExp(`\\b(${term})\\b(?![^<>]*>)`, "gi");
+    result = result.replace(regex, `<span class="jargon-term" data-term="$1">$1</span>`);
+  });
+  return result;
+}
+
 // Markdown Parser Helper
 function parseMarkdown(mdText) {
   if (!mdText) return "<p class='text-muted'>No content available.</p>";
   
   try {
     if (window.marked) {
-      // Use marked package to parse markdown cleanly
-      return `<div class="markdown-body">${window.marked.parse(mdText)}</div>`;
+      const parsed = typeof window.marked.parse === 'function' ? window.marked.parse(mdText) : window.marked(mdText);
+      return `<div class="markdown-body">${parsed}</div>`;
     }
   } catch (e) {
     console.error("Failed to parse markdown with marked library:", e);
@@ -99,6 +162,147 @@ function parseMarkdown(mdText) {
   
   return `<div class="markdown-body">${html}</div>`;
 }
+
+// AppSync WebSocket connection configuration and helpers
+function getAppSyncWebSocketUrl() {
+  const url = new URL(ENV.GRAPHQL_API_ENDPOINT);
+  const host = url.host;
+  const wsHost = host.replace("appsync-api", "appsync-realtime-api");
+  const wsUrl = `wss://${wsHost}/graphql`;
+  
+  // Build header object
+  const header = {
+    host: host,
+    "x-api-key": ENV.API_KEY
+  };
+  
+  const headerBase64 = btoa(JSON.stringify(header));
+    
+  return `${wsUrl}?header=${headerBase64}&payload=e30=`;
+}
+
+function subscribeToChatbot(sessionId, onChunk, onComplete) {
+  const wsUrl = getAppSyncWebSocketUrl();
+  const ws = new WebSocket(wsUrl, ["graphql-ws"]);
+  
+  ws.onopen = () => {
+    ws.send(JSON.stringify({ type: "connection_init" }));
+  };
+  
+  ws.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
+    
+    if (msg.type === "connection_ack") {
+      const subscriptionId = "sub-" + Math.random().toString(36).substr(2, 9);
+      
+      const query = `
+        subscription OnChatbotChunk($sessionId: String!) {
+          onChatbotChunk(sessionId: $sessionId) {
+            sessionId
+            chunk
+            isComplete
+          }
+        }
+      `;
+      
+      const host = new URL(ENV.GRAPHQL_API_ENDPOINT).host;
+      const authorization = {
+        host: host,
+        "x-api-key": ENV.API_KEY
+      };
+      
+      ws.send(JSON.stringify({
+        id: subscriptionId,
+        type: "start",
+        payload: {
+          data: JSON.stringify({
+            query: query,
+            variables: { sessionId: sessionId }
+          }),
+          extensions: {
+            authorization: authorization
+          }
+        }
+      }));
+    } else if (msg.type === "data") {
+      const chunkData = msg.payload.data?.onChatbotChunk;
+      if (chunkData) {
+        if (chunkData.isComplete) {
+          onComplete();
+          ws.close();
+        } else {
+          onChunk(chunkData.chunk);
+        }
+      }
+    } else if (msg.type === "error") {
+      console.error("AppSync Subscription error:", msg.payload);
+      ws.close();
+    }
+  };
+  
+  ws.onerror = (err) => {
+    console.error("WebSocket error:", err);
+  };
+  
+  return ws;
+}
+
+// Global click listener to intercept clicking on courses within the chat UI
+document.addEventListener("click", function(e) {
+  const anchor = e.target.closest("a");
+  if (anchor) {
+    const href = anchor.getAttribute("href");
+    if (href && (href.startsWith("#course/") || href.startsWith("course:"))) {
+      e.preventDefault();
+      const courseId = href.split("/").pop().split(":").pop();
+      if (typeof window.selectCourse === "function") {
+        const sideNavChat = document.getElementById("side-nav-chat");
+        const sideNavLibrary = document.getElementById("side-nav-library");
+        const chatWorkspaceContainer = document.getElementById("chat-workspace-container");
+        const coursesWorkspaceContainer = document.getElementById("courses-workspace-container");
+        const analyzerSidebarContents = document.getElementById("analyzer-sidebar-contents");
+        const coursesSidebarContents = document.getElementById("courses-sidebar-contents");
+
+        if (sideNavChat) sideNavChat.classList.remove("active");
+        if (sideNavLibrary) sideNavLibrary.classList.add("active");
+        if (chatWorkspaceContainer) chatWorkspaceContainer.classList.add("hidden");
+        if (coursesWorkspaceContainer) coursesWorkspaceContainer.classList.remove("hidden");
+        if (analyzerSidebarContents) analyzerSidebarContents.classList.add("hidden");
+        if (coursesSidebarContents) coursesSidebarContents.classList.remove("hidden");
+
+        const select = () => {
+          if (!courses || courses.length === 0) {
+            loadCourses().then(() => {
+              doSelect();
+            });
+          } else {
+            doSelect();
+          }
+        };
+
+        const doSelect = () => {
+          let course = courses.find(c => c.courseId === courseId);
+          if (!course) {
+            // Title-matching fallback if ID is missing/hallucinated
+            const linkText = anchor.textContent.trim().toLowerCase();
+            course = courses.find(c => {
+              const cTitle = c.title.toLowerCase();
+              return cTitle === linkText || cTitle.includes(linkText) || linkText.includes(cTitle);
+            });
+          }
+          if (course) {
+            window.selectCourse(course.courseId);
+          } else {
+            console.warn("Course not found for ID or Title matching:", courseId);
+          }
+        };
+
+        select();
+      }
+    }
+  }
+});
+
 
 // Q&A Parser Helper
 function parseQA(qaText) {
@@ -437,6 +641,7 @@ function renderVideoList() {
 
 // Selection handling
 async function selectVideo(videoUri) {
+  switchToAnalyzer(false);
   activeVideoUri = videoUri;
   activeLanguage = "en";
   activeLessonIndex = null; // Default to full video
@@ -601,11 +806,15 @@ function renderLearningAssets(source) {
     const localizedSource = getLocalizedSource(source);
     // Summary
     const summaryHTML = parseMarkdown(localizedSource.summary);
-    document.getElementById("summary-text").innerHTML = summaryHTML;
+    const summaryEl = document.getElementById("summary-text");
+    summaryEl.innerHTML = summaryHTML;
+    wrapJargonInElement(summaryEl);
 
     // Key Takeaways
     const takeawaysHTML = parseMarkdown(localizedSource.keyTakeaways || "No key takeaways generated for this selection.");
-    document.getElementById("takeaways-text").innerHTML = takeawaysHTML;
+    const takeawaysEl = document.getElementById("takeaways-text");
+    takeawaysEl.innerHTML = takeawaysHTML;
+    wrapJargonInElement(takeawaysEl);
 
     // Q&A / Quiz Init
     quizQuestions = parseQA(localizedSource.qa);
@@ -1335,37 +1544,7 @@ window.selectVideo = async function(videoUri) {
 // COURSE PORTAL IMPLEMENTATION
 // ==========================================================
 
-const navBtnAnalyzer = document.getElementById("nav-btn-analyzer");
-const navBtnCourses = document.getElementById("nav-btn-courses");
-const analyzerSidebarContents = document.getElementById("analyzer-sidebar-contents");
-const coursesSidebarContents = document.getElementById("courses-sidebar-contents");
-const analyzerWorkspaceContainer = document.getElementById("analyzer-workspace-container");
-const coursesWorkspaceContainer = document.getElementById("courses-workspace-container");
-
-function switchToAnalyzer() {
-  navBtnAnalyzer.classList.add("active");
-  navBtnCourses.classList.remove("active");
-  
-  analyzerSidebarContents.classList.remove("hidden");
-  coursesSidebarContents.classList.add("hidden");
-  analyzerWorkspaceContainer.classList.remove("hidden");
-  coursesWorkspaceContainer.classList.add("hidden");
-}
-
-function switchToCourses() {
-  navBtnCourses.classList.add("active");
-  navBtnAnalyzer.classList.remove("active");
-  
-  coursesSidebarContents.classList.remove("hidden");
-  analyzerSidebarContents.classList.add("hidden");
-  coursesWorkspaceContainer.classList.remove("hidden");
-  analyzerWorkspaceContainer.classList.add("hidden");
-  
-  loadCourses();
-}
-
-navBtnAnalyzer.addEventListener("click", switchToAnalyzer);
-navBtnCourses.addEventListener("click", switchToCourses);
+// Old redundant elements and switcher functions removed to resolve SyntaxError and redeclaration conflicts
 
 async function loadCourses() {
   const coursesGrid = document.getElementById("courses-grid");
@@ -1543,6 +1722,13 @@ window.selectCourseLesson = function(moduleId, lessonId) {
     const mod = activeCourse.modules.find(m => m.moduleId === moduleId);
     const lesson = mod ? mod.lessons.find(l => l.lessonId === lessonId) : null;
     
+    // Check prerequisites warning gate
+    const prereq = checkPrerequisites(lesson);
+    if (prereq) {
+      showPrereqModal(prereq, mod, lesson);
+      return;
+    }
+    
     activeCourseLesson = lesson;
     activeCourseModule = mod;
   }
@@ -1606,6 +1792,9 @@ function renderLessonDetails(lesson) {
     <h1>${lesson.title}</h1>
     <div style="margin-bottom: 1.5rem;">${parseMarkdown(lesson.content)}</div>
   `;
+  
+  // Wrap jargon terms, avoiding code blocks
+  wrapJargonInElement(mdBody);
   
   // 3. Render Quiz
   renderCourseLessonQuiz(lesson);
@@ -1959,38 +2148,79 @@ async function sendChatbotMessage() {
   `;
   chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
   
+  const responseId = "bot-msg-" + Date.now();
+  let accumulatedText = "";
+  let subscription = null;
+  let isStreamFinished = false;
+
+  subscription = subscribeToChatbot(chatSessionId, (chunk) => {
+    const typingIndicator = document.getElementById(typingId);
+    if (typingIndicator) typingIndicator.remove();
+    
+    let responseEl = document.getElementById(responseId);
+    if (!responseEl) {
+      chatbotMessages.innerHTML += `
+        <div class="chat-msg chat-msg-bot" id="${responseId}"></div>
+      `;
+      responseEl = document.getElementById(responseId);
+    }
+    
+    accumulatedText += chunk;
+    responseEl.innerHTML = parseMarkdown(accumulatedText);
+    chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
+  }, () => {
+    isStreamFinished = true;
+    const typingIndicator = document.getElementById(typingId);
+    if (typingIndicator) typingIndicator.remove();
+    
+    let responseEl = document.getElementById(responseId);
+    if (responseEl) {
+      wrapJargonInElement(responseEl);
+      if (window.hljs) {
+        responseEl.querySelectorAll('pre code').forEach((block) => {
+          window.hljs.highlightElement(block);
+        });
+      }
+    }
+    chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
+  });
+
   try {
     const data = await queryGraphQL(`
-      query AskCourseChatbot($courseId: String, $message: String!) {
-        askCourseChatbot(courseId: $courseId, message: $message)
+      query AskCourseChatbot($courseId: String, $message: String!, $sessionId: String) {
+        askCourseChatbot(courseId: $courseId, message: $message, sessionId: $sessionId)
       }
     `, {
       courseId: activeCourse ? activeCourse.courseId : null,
-      message: text
+      message: text,
+      sessionId: chatSessionId
     });
     
     const typingIndicator = document.getElementById(typingId);
     if (typingIndicator) typingIndicator.remove();
     
     const answer = data.askCourseChatbot || "No response received.";
-    const responseId = "bot-msg-" + Date.now();
-    chatbotMessages.innerHTML += `
-      <div class="chat-msg chat-msg-bot" id="${responseId}">
-        ${parseMarkdown(answer)}
-      </div>
-    `;
-    chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
-    
-    // Highlight code blocks inside the new chatbot response
-    if (window.hljs) {
-      const msgEl = document.getElementById(responseId);
-      if (msgEl) {
-        msgEl.querySelectorAll('pre code').forEach((block) => {
+    if (!isStreamFinished || !accumulatedText) {
+      let responseEl = document.getElementById(responseId);
+      if (!responseEl) {
+        chatbotMessages.innerHTML += `
+          <div class="chat-msg chat-msg-bot" id="${responseId}"></div>
+        `;
+        responseEl = document.getElementById(responseId);
+      }
+      responseEl.innerHTML = parseMarkdown(answer);
+      wrapJargonInElement(responseEl);
+      if (window.hljs) {
+        responseEl.querySelectorAll('pre code').forEach((block) => {
           window.hljs.highlightElement(block);
         });
       }
+      chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
     }
   } catch (err) {
+    if (subscription) {
+      try { subscription.close(); } catch(e) {}
+    }
     const typingIndicator = document.getElementById(typingId);
     if (typingIndicator) typingIndicator.remove();
     chatbotMessages.innerHTML += `
@@ -2001,6 +2231,281 @@ async function sendChatbotMessage() {
     chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
   }
 }
+
+// Chat Session Management
+let chatSessionId = localStorage.getItem("chatSessionId");
+if (!chatSessionId) {
+  chatSessionId = "session-" + Math.random().toString(36).substring(2, 15);
+  localStorage.setItem("chatSessionId", chatSessionId);
+}
+
+// Prerequisite & Refresher Quiz Gateways Logic
+const COURSE_PREREQS = {
+  "observability": "GraphQL / AppSync Observability",
+  "appsync": "GraphQL Resolver Basics",
+  "stripe": "REST Stripe Integrations",
+  "neo4j": "Graph Database & Neo4j",
+  "agentcore": "AI Agent Orchestration & AgentCore"
+};
+
+const REFRESHER_QUIZZES = {
+  "appsync": {
+    "question": "What is the primary difference between a GraphQL query and a GraphQL mutation?",
+    "options": [
+      "Queries read data (GET), while mutations write/modify data (POST/PUT).",
+      "Queries are run on the client, mutations are run on the server.",
+      "Queries use databases, mutations use file systems.",
+      "There is no difference."
+    ],
+    "correct_index": 0
+  },
+  "observability": {
+    "question": "Why is structured logging preferred over unstructured console prints in cloud applications?",
+    "options": [
+      "It allows logs to be easily queried and filtered using automated tools like CloudWatch Logs Insights.",
+      "It makes the application run faster.",
+      "It compresses the size of log files.",
+      "It is required by TypeScript compiler."
+    ],
+    "correct_index": 0
+  },
+  "stripe": {
+    "question": "What is a Stripe Webhook used for?",
+    "options": [
+      "To asynchronously notify your backend of event updates (like payment completed).",
+      "To redirect customers to the checkout page.",
+      "To securely encrypt credit card information on the client.",
+      "To refund payments automatically."
+    ],
+    "correct_index": 0
+  },
+  "neo4j": {
+    "question": "What is the primary traversal benefit of a Graph Database (like Neo4j) over a Relational Database?",
+    "options": [
+      "Fast relationship lookups without complex, high-latency multi-table JOIN operations.",
+      "It takes up less storage space.",
+      "It can only run on local machines.",
+      "It is always cheaper to deploy."
+    ],
+    "correct_index": 0
+  },
+  "agentcore": {
+    "question": "What is the core role of the Agent Orchestrator in an AI Agent system?",
+    "options": [
+      "To coordinate multiple model calls, plan task execution steps, and manage memory.",
+      "To compile python code into binary.",
+      "To host the database index.",
+      "To secure the Cognito authentication credentials."
+    ],
+    "correct_index": 0
+  }
+};
+
+let completedRefresherQuizzes = JSON.parse(localStorage.getItem("completedRefresherQuizzes") || "[]");
+let pendingLessonToLoad = null;
+let pendingModuleToLoad = null;
+let activeRefresherPrereq = null;
+let selectedRefresherOption = null;
+
+function checkPrerequisites(lesson) {
+  if (!lesson) return null;
+  const title = lesson.title.toLowerCase();
+  
+  for (const [key, prereq] of Object.entries(COURSE_PREREQS)) {
+    if (title.includes(key)) {
+      if (!completedRefresherQuizzes.includes(key)) {
+        return { key: key, name: prereq };
+      }
+    }
+  }
+  return null;
+}
+
+function showPrereqModal(prereq, mod, lesson) {
+  pendingModuleToLoad = mod;
+  pendingLessonToLoad = lesson;
+  activeRefresherPrereq = prereq;
+  
+  const modal = document.getElementById("prereq-modal");
+  const text = document.getElementById("prereq-text");
+  text.innerHTML = `The lesson <strong>"${lesson.title}"</strong> covers advanced cloud concepts and recommends some prerequisite knowledge of <strong>${prereq.name}</strong>.<br><br>Would you like to take a 2-minute interactive refresher quiz first?`;
+  modal.classList.remove("hidden");
+}
+
+function startRefresherQuiz(prereq) {
+  const quiz = REFRESHER_QUIZZES[prereq.key];
+  if (!quiz) {
+    // Bypass if quiz isn't defined
+    completedRefresherQuizzes.push(prereq.key);
+    localStorage.setItem("completedRefresherQuizzes", JSON.stringify(completedRefresherQuizzes));
+    activeCourseLesson = pendingLessonToLoad;
+    activeCourseModule = pendingModuleToLoad;
+    renderCourseSyllabus();
+    renderLessonDetails(activeCourseLesson);
+    return;
+  }
+  
+  const modal = document.getElementById("refresher-quiz-modal");
+  const questionEl = document.getElementById("refresher-question");
+  const optionsEl = document.getElementById("refresher-options");
+  const feedbackEl = document.getElementById("refresher-feedback");
+  const actionBtn = document.getElementById("btn-refresher-action");
+  
+  document.getElementById("refresher-title").textContent = `${prereq.name} Refresher`;
+  questionEl.textContent = quiz.question;
+  feedbackEl.classList.add("hidden");
+  selectedRefresherOption = null;
+  
+  actionBtn.textContent = "Submit Answer";
+  actionBtn.disabled = true;
+  
+  optionsEl.innerHTML = quiz.options.map((opt, idx) => {
+    return `
+      <button class="quiz-option-btn" onclick="selectRefresherOption(${idx})" id="ref-opt-${idx}">
+        <span class="option-letter">${String.fromCharCode(65 + idx)}</span>
+        <span class="option-text">${opt}</span>
+      </button>
+    `;
+  }).join("");
+  
+  modal.classList.remove("hidden");
+}
+
+window.selectRefresherOption = function(idx) {
+  const quiz = REFRESHER_QUIZZES[activeRefresherPrereq.key];
+  for (let i = 0; i < quiz.options.length; i++) {
+    const el = document.getElementById(`ref-opt-${i}`);
+    if (el) el.classList.remove("correct", "incorrect");
+  }
+  
+  selectedRefresherOption = idx;
+  const selectedEl = document.getElementById(`ref-opt-${idx}`);
+  if (selectedEl) {
+    selectedEl.style.borderColor = "var(--accent-purple)";
+  }
+  
+  const actionBtn = document.getElementById("btn-refresher-action");
+  actionBtn.disabled = false;
+};
+
+// Global click event for jargon term popovers
+document.addEventListener("click", async (e) => {
+  const target = e.target.closest(".jargon-term");
+  const existingTooltip = document.querySelector(".jargon-tooltip");
+  
+  if (existingTooltip && (!target || !existingTooltip.contains(e.target))) {
+    existingTooltip.remove();
+  }
+  
+  if (!target) return;
+  
+  e.preventDefault();
+  e.stopPropagation();
+  
+  const term = target.getAttribute("data-term");
+  if (!term) return;
+  
+  // Show tooltip with loading state
+  const tooltip = document.createElement("div");
+  tooltip.className = "jargon-tooltip";
+  tooltip.innerHTML = `<strong>${term}</strong>: Loading analogy... ⏳`;
+  document.body.appendChild(tooltip);
+  
+  const rect = target.getBoundingClientRect();
+  const tooltipRect = tooltip.getBoundingClientRect();
+  
+  const top = window.scrollY + rect.top - tooltipRect.height - 10;
+  const left = window.scrollX + rect.left + (rect.width - tooltipRect.width) / 2;
+  
+  tooltip.style.top = `${top}px`;
+  tooltip.style.left = `${Math.max(10, left)}px`;
+  
+  try {
+    const res = await queryGraphQL(`
+      query DemystifyJargon($term: String!) {
+        demystifyJargon(term: $term)
+      }
+    `, { term: term });
+    
+    if (res.demystifyJargon) {
+      tooltip.innerHTML = `<strong>${term}</strong>: ${res.demystifyJargon}`;
+      const newTooltipRect = tooltip.getBoundingClientRect();
+      const newTop = window.scrollY + rect.top - newTooltipRect.height - 10;
+      tooltip.style.top = `${newTop}px`;
+    }
+  } catch (err) {
+    tooltip.innerHTML = `<strong>${term}</strong>: Failed to load analogy.`;
+  }
+});
+
+// Setup prerequisite event listeners
+document.getElementById("btn-close-prereq").addEventListener("click", () => {
+  document.getElementById("prereq-modal").classList.add("hidden");
+});
+
+document.getElementById("btn-prereq-skip").addEventListener("click", () => {
+  if (activeRefresherPrereq) {
+    completedRefresherQuizzes.push(activeRefresherPrereq.key);
+    localStorage.setItem("completedRefresherQuizzes", JSON.stringify(completedRefresherQuizzes));
+  }
+  document.getElementById("prereq-modal").classList.add("hidden");
+  activeCourseLesson = pendingLessonToLoad;
+  activeCourseModule = pendingModuleToLoad;
+  renderCourseSyllabus();
+  renderLessonDetails(activeCourseLesson);
+});
+
+document.getElementById("btn-prereq-quiz").addEventListener("click", () => {
+  document.getElementById("prereq-modal").classList.add("hidden");
+  startRefresherQuiz(activeRefresherPrereq);
+});
+
+document.getElementById("btn-close-refresher").addEventListener("click", () => {
+  document.getElementById("refresher-quiz-modal").classList.add("hidden");
+});
+
+document.getElementById("btn-refresher-action").addEventListener("click", () => {
+  const quiz = REFRESHER_QUIZZES[activeRefresherPrereq.key];
+  const feedbackEl = document.getElementById("refresher-feedback");
+  const actionBtn = document.getElementById("btn-refresher-action");
+  
+  if (actionBtn.textContent === "Continue to Lesson") {
+    completedRefresherQuizzes.push(activeRefresherPrereq.key);
+    localStorage.setItem("completedRefresherQuizzes", JSON.stringify(completedRefresherQuizzes));
+    document.getElementById("refresher-quiz-modal").classList.add("hidden");
+    
+    activeCourseLesson = pendingLessonToLoad;
+    activeCourseModule = pendingModuleToLoad;
+    renderCourseSyllabus();
+    renderLessonDetails(activeCourseLesson);
+    return;
+  }
+  
+  if (selectedRefresherOption === quiz.correctIndex) {
+    feedbackEl.innerHTML = "<strong>Correct! 🎉</strong> Excellent job. You have completed the refresher.";
+    feedbackEl.style.backgroundColor = "rgba(34, 197, 94, 0.1)";
+    feedbackEl.style.color = "var(--status-completed)";
+    feedbackEl.style.border = "1px solid var(--status-completed)";
+    feedbackEl.classList.remove("hidden");
+    
+    const optEl = document.getElementById(`ref-opt-${quiz.correctIndex}`);
+    if (optEl) optEl.classList.add("correct");
+    actionBtn.textContent = "Continue to Lesson";
+  } else {
+    feedbackEl.innerHTML = "<strong>Not quite. ❌</strong> Please review the question and try again.";
+    feedbackEl.style.backgroundColor = "rgba(239, 68, 68, 0.1)";
+    feedbackEl.style.color = "var(--status-failed)";
+    feedbackEl.style.border = "1px solid var(--status-failed)";
+    feedbackEl.classList.remove("hidden");
+    
+    const optEl = document.getElementById(`ref-opt-${selectedRefresherOption}`);
+    if (optEl) optEl.classList.add("incorrect");
+    
+    actionBtn.textContent = "Try Again";
+    actionBtn.disabled = true;
+    selectedRefresherOption = null;
+  }
+});
 
 // Course Back Button
 document.getElementById("btn-course-back").addEventListener("click", () => {
@@ -2044,8 +2549,416 @@ document.getElementById("btn-admin-ingest").addEventListener("click", async () =
   }
 });
 
-// Initialize switcher hook
-document.addEventListener("DOMContentLoaded", () => {
-  switchToAnalyzer();
+// ==========================================================
+// ZYRICON SLEEK DASHBOARD & TELEMETRY CONTROLLERS
+// ==========================================================
+
+const sideNavChat = document.getElementById("side-nav-chat");
+const sideNavAnalyzer = document.getElementById("side-nav-analyzer");
+const sideNavLibrary = document.getElementById("side-nav-library");
+const sideNavTelemetry = document.getElementById("side-nav-telemetry");
+
+const chatWorkspaceContainer = document.getElementById("chat-workspace-container");
+const analyzerWorkspaceContainer = document.getElementById("analyzer-workspace-container");
+const coursesWorkspaceContainer = document.getElementById("courses-workspace-container");
+const telemetryWorkspaceContainer = document.getElementById("telemetry-workspace-container");
+
+const analyzerSidebarContents = document.getElementById("analyzer-sidebar-contents");
+const coursesSidebarContents = document.getElementById("courses-sidebar-contents");
+
+const sideBtnNewChat = document.getElementById("btn-new-chat-sidebar");
+const btnCollapseSidebar = document.getElementById("btn-collapse-sidebar");
+const sidebarEl = document.getElementById("sidebar");
+
+const selectModel = document.getElementById("select-model");
+const btnChatConfig = document.getElementById("btn-chat-config");
+const btnChatExport = document.getElementById("btn-chat-export");
+
+const mainChatWelcome = document.getElementById("main-chat-welcome");
+const mainChatStream = document.getElementById("main-chat-stream");
+const mainChatInput = document.getElementById("main-chat-input");
+const btnChatSend = document.getElementById("btn-chat-send");
+const btnChatMic = document.getElementById("btn-chat-mic");
+const mainChatFeatureCards = document.getElementById("main-chat-feature-cards");
+
+const cardVideoAi = document.getElementById("card-video-ai");
+const cardLibrary = document.getElementById("card-library");
+const cardDiagnostic = document.getElementById("card-diagnostic");
+
+const btnRefreshTelemetry = document.getElementById("btn-refresh-telemetry");
+const telemetryList = document.getElementById("telemetry-list");
+const telemetryCountBadge = document.getElementById("telemetry-count-badge");
+const evaluationsList = document.getElementById("evaluations-list");
+const evaluationsCountBadge = document.getElementById("evaluations-count-badge");
+
+function clearActiveSideNav() {
+  [
+    sideNavChat, sideNavAnalyzer, sideNavLibrary, sideNavTelemetry
+  ].forEach(btn => {
+    if (btn) btn.classList.remove("active");
+  });
+}
+
+function hideAllWorkspaceContainers() {
+  [chatWorkspaceContainer, analyzerWorkspaceContainer, coursesWorkspaceContainer, telemetryWorkspaceContainer].forEach(container => {
+    if (container) container.classList.add("hidden");
+  });
+}
+
+window.switchToChat = function() {
+  clearActiveSideNav();
+  if (sideNavChat) sideNavChat.classList.add("active");
+  hideAllWorkspaceContainers();
+  if (chatWorkspaceContainer) chatWorkspaceContainer.classList.remove("hidden");
+  
+  if (analyzerSidebarContents) analyzerSidebarContents.classList.remove("hidden");
+  if (coursesSidebarContents) coursesSidebarContents.classList.add("hidden");
+};
+
+window.switchToAnalyzer = function(showUpload = true) {
+  clearActiveSideNav();
+  if (sideNavAnalyzer) sideNavAnalyzer.classList.add("active");
+  hideAllWorkspaceContainers();
+  if (analyzerWorkspaceContainer) analyzerWorkspaceContainer.classList.remove("hidden");
+  
+  if (showUpload) {
+    if (welcomeScreen) welcomeScreen.classList.remove("hidden");
+    if (workspace) workspace.classList.add("hidden");
+    activeVideoUri = null;
+  }
+  
+  if (analyzerSidebarContents) analyzerSidebarContents.classList.remove("hidden");
+  if (coursesSidebarContents) coursesSidebarContents.classList.add("hidden");
+};
+
+window.switchToLibrary = function() {
+  clearActiveSideNav();
+  if (sideNavLibrary) sideNavLibrary.classList.add("active");
+  hideAllWorkspaceContainers();
+  if (coursesWorkspaceContainer) coursesWorkspaceContainer.classList.remove("hidden");
+  
+  // Reset course views to show the library list
+  const libView = document.getElementById("course-library-view");
+  const detailView = document.getElementById("course-detail-view");
+  if (libView) libView.classList.remove("hidden");
+  if (detailView) detailView.classList.add("hidden");
+  
+  if (analyzerSidebarContents) analyzerSidebarContents.classList.remove("hidden");
+  if (coursesSidebarContents) coursesSidebarContents.classList.add("hidden");
+  
+  loadCourses();
+};
+
+window.switchToTelemetry = function() {
+  clearActiveSideNav();
+  if (sideNavTelemetry) sideNavTelemetry.classList.add("active");
+  hideAllWorkspaceContainers();
+  if (telemetryWorkspaceContainer) telemetryWorkspaceContainer.classList.remove("hidden");
+  
+  if (analyzerSidebarContents) analyzerSidebarContents.classList.remove("hidden");
+  if (coursesSidebarContents) coursesSidebarContents.classList.add("hidden");
+  
+  loadTelemetryLogs();
+};
+
+// Sidebar Collapse Handler
+if (btnCollapseSidebar && sidebarEl) {
+  btnCollapseSidebar.addEventListener("click", () => {
+    sidebarEl.classList.toggle("collapsed");
+  });
+}
+
+// Main Chat Message Submission
+async function sendMainChatMsg() {
+  if (!mainChatInput) return;
+  const text = mainChatInput.value.trim();
+  if (!text) return;
+
+  mainChatInput.value = "";
+  
+  // Update state to active chat stream
+  if (mainChatWelcome) mainChatWelcome.classList.add("hidden");
+  if (mainChatFeatureCards) mainChatFeatureCards.classList.add("hidden");
+  if (mainChatStream) mainChatStream.classList.remove("hidden");
+
+  // Append user message
+  mainChatStream.innerHTML += `
+    <div class="chat-msg-user" style="margin-bottom: 0.5rem;">
+      ${text}
+    </div>
+  `;
+  mainChatStream.scrollTop = mainChatStream.scrollHeight;
+
+  const typingId = "main-typing-" + Date.now();
+  mainChatStream.innerHTML += `
+    <div class="chat-msg-typing" id="${typingId}" style="margin-bottom: 0.5rem; display: flex; gap: 0.25rem;">
+      <span style="animation: pulse 1s infinite alternate; width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); display: inline-block;"></span>
+      <span style="animation: pulse 1s infinite alternate 0.2s; width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); display: inline-block;"></span>
+      <span style="animation: pulse 1s infinite alternate 0.4s; width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); display: inline-block;"></span>
+    </div>
+  `;
+  mainChatStream.scrollTop = mainChatStream.scrollHeight;
+
+  const responseId = "main-bot-msg-" + Date.now();
+  let accumulatedText = "";
+  let subscription = null;
+  let isStreamFinished = false;
+
+  subscription = subscribeToChatbot(chatSessionId, (chunk) => {
+    const typingIndicator = document.getElementById(typingId);
+    if (typingIndicator) typingIndicator.remove();
+    
+    let responseEl = document.getElementById(responseId);
+    if (!responseEl) {
+      mainChatStream.innerHTML += `
+        <div class="chat-msg-bot markdown-body" id="${responseId}" style="margin-bottom: 0.5rem;"></div>
+      `;
+      responseEl = document.getElementById(responseId);
+    }
+    
+    accumulatedText += chunk;
+    responseEl.innerHTML = parseMarkdown(accumulatedText);
+    mainChatStream.scrollTop = mainChatStream.scrollHeight;
+  }, () => {
+    isStreamFinished = true;
+    const typingIndicator = document.getElementById(typingId);
+    if (typingIndicator) typingIndicator.remove();
+    
+    let responseEl = document.getElementById(responseId);
+    if (responseEl) {
+      wrapJargonInElement(responseEl);
+      if (window.hljs) {
+        responseEl.querySelectorAll('pre code').forEach((block) => {
+          window.hljs.highlightElement(block);
+        });
+      }
+    }
+    mainChatStream.scrollTop = mainChatStream.scrollHeight;
+  });
+
+  try {
+    const variables = {
+      message: text,
+      sessionId: chatSessionId
+    };
+    if (activeCourse) {
+      variables.courseId = activeCourse.courseId;
+    }
+
+    const queryStr = `
+      query AskCourseChatbot($courseId: String, $message: String!, $sessionId: String) {
+        askCourseChatbot(courseId: $courseId, message: $message, sessionId: $sessionId)
+      }
+    `;
+
+    const data = await queryGraphQL(queryStr, variables);
+    const typingIndicator = document.getElementById(typingId);
+    if (typingIndicator) typingIndicator.remove();
+
+    const answer = data.askCourseChatbot || "No response received.";
+    if (!isStreamFinished || !accumulatedText) {
+      let responseEl = document.getElementById(responseId);
+      if (!responseEl) {
+        mainChatStream.innerHTML += `
+          <div class="chat-msg-bot markdown-body" id="${responseId}" style="margin-bottom: 0.5rem;"></div>
+        `;
+        responseEl = document.getElementById(responseId);
+      }
+      responseEl.innerHTML = parseMarkdown(answer);
+      wrapJargonInElement(responseEl);
+      if (window.hljs) {
+        responseEl.querySelectorAll('pre code').forEach((block) => {
+          window.hljs.highlightElement(block);
+        });
+      }
+      mainChatStream.scrollTop = mainChatStream.scrollHeight;
+    }
+  } catch (err) {
+    if (subscription) {
+      try { subscription.close(); } catch(e) {}
+    }
+    const typingIndicator = document.getElementById(typingId);
+    if (typingIndicator) typingIndicator.remove();
+    mainChatStream.innerHTML += `
+      <div class="chat-msg-error" style="margin-bottom: 0.5rem;">
+        Failed to fetch AI response: ${err.message}
+      </div>
+    `;
+    mainChatStream.scrollTop = mainChatStream.scrollHeight;
+  }
+}
+
+// Start Diagnostic Quiz directly in chat
+window.startDiagnosticQuizDirectly = function() {
+  if (mainChatInput) {
+    mainChatInput.value = "Start Diagnostic Quiz";
+    sendMainChatMsg();
+  }
+};
+
+// Reset chat history / Start new chat
+async function resetTutorChat() {
+  if (mainChatStream) mainChatStream.innerHTML = "";
+  if (mainChatStream) mainChatStream.classList.add("hidden");
+  if (mainChatWelcome) mainChatWelcome.classList.remove("hidden");
+  if (mainChatFeatureCards) mainChatFeatureCards.classList.remove("hidden");
+  
+  // Send reset command to clean session in DB
+  try {
+    await queryGraphQL(`
+      query AskCourseChatbot($message: String!, $sessionId: String) {
+        askCourseChatbot(message: $message, sessionId: $sessionId)
+      }
+    `, {
+      message: "reset",
+      sessionId: chatSessionId
+    });
+    console.log("Chat history reset successfully on backend.");
+  } catch (e) {
+    console.warn("Failed to reset backend chat logs:", e);
+  }
+}
+
+// Fetch and Render Telemetry / Evaluations Logs
+async function loadTelemetryLogs() {
+  if (!telemetryList || !evaluationsList) return;
+
+  telemetryList.innerHTML = `<div class="loading-spinner-small">Loading telemetry logs...</div>`;
+  evaluationsList.innerHTML = `<div class="loading-spinner-small">Loading evaluations...</div>`;
+
+  // 1. Fetch content demand telemetry
+  try {
+    const data = await queryGraphQL(`
+      query GetContentDemandTelemetry {
+        getContentDemandTelemetry {
+          requestId
+          prompt
+          timestamp
+          detectedTopic
+        }
+      }
+    `);
+    const list = data.getContentDemandTelemetry || [];
+    telemetryCountBadge.textContent = list.length;
+    
+    if (list.length === 0) {
+      telemetryList.innerHTML = `<div class="text-muted" style="text-align: center; margin-top: 3rem; font-size: 0.85rem;">No telemetry events recorded yet. Try asking for Azure/GCP topics to trigger logging.</div>`;
+    } else {
+      telemetryList.innerHTML = list.map(item => {
+        const dateStr = new Date(parseFloat(item.timestamp) * 1000).toLocaleString();
+        return `
+          <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 0.75rem 1rem; display: flex; flex-direction: column; gap: 0.4rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span style="font-size: 0.75rem; background: rgba(147,51,234,0.15); color: #c084fc; padding: 0.2rem 0.6rem; border-radius: 10px; font-weight: 600;">${item.detectedTopic || 'Unknown'}</span>
+              <span style="font-size: 0.7rem; color: var(--text-muted);">${dateStr}</span>
+            </div>
+            <p style="font-size: 0.8rem; font-weight: 500; color: var(--text-bright); margin: 0;">"${item.prompt}"</p>
+            <span style="font-size: 0.65rem; color: var(--text-muted);">Request ID: ${item.requestId}</span>
+          </div>
+        `;
+      }).join('');
+    }
+  } catch (err) {
+    telemetryList.innerHTML = `<div class="chat-msg-error">Failed to load telemetry logs: ${err.message}</div>`;
+  }
+
+  // 2. Fetch log evaluations
+  try {
+    const data = await queryGraphQL(`
+      query GetChatEvaluations {
+        getChatEvaluations {
+          evaluationId
+          sessionId
+          userPrompt
+          assistantResponse
+          relevanceScore
+          politenessScore
+          adherenceScore
+          justification
+          timestamp
+        }
+      }
+    `);
+    const list = data.getChatEvaluations || [];
+    evaluationsCountBadge.textContent = list.length;
+
+    if (list.length === 0) {
+      evaluationsList.innerHTML = `<div class="text-muted" style="text-align: center; margin-top: 3rem; font-size: 0.85rem;">No log evaluations available yet. Runs automatically at midnight or via manual trigger.</div>`;
+    } else {
+      evaluationsList.innerHTML = list.map(item => {
+        const dateStr = new Date(parseFloat(item.timestamp) * 1000).toLocaleString();
+        
+        const getScoreColor = (score) => {
+          if (score >= 8) return 'rgba(34,197,94,0.15); color: #86efac;';
+          if (score >= 5) return 'rgba(234,179,8,0.15); color: #fef08a;';
+          return 'rgba(239,68,68,0.15); color: #fca5a5;';
+        };
+
+        return `
+          <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 0.75rem 1rem; display: flex; flex-direction: column; gap: 0.4rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 0.5rem; margin-bottom: 0.25rem;">
+              <span style="font-size: 0.7rem; color: var(--text-muted); font-weight: 500;">Session: ${item.sessionId.substring(0, 15)}...</span>
+              <span style="font-size: 0.7rem; color: var(--text-muted);">${dateStr}</span>
+            </div>
+            
+            <div style="display: flex; gap: 0.5rem; margin-bottom: 0.25rem;">
+              <span style="font-size: 0.65rem; padding: 0.15rem 0.4rem; border-radius: 6px; font-weight: 600; background: ${getScoreColor(item.relevanceScore)}">Relevance: ${item.relevanceScore}/10</span>
+              <span style="font-size: 0.65rem; padding: 0.15rem 0.4rem; border-radius: 6px; font-weight: 600; background: ${getScoreColor(item.politenessScore)}">Politeness: ${item.politenessScore}/10</span>
+              <span style="font-size: 0.65rem; padding: 0.15rem 0.4rem; border-radius: 6px; font-weight: 600; background: ${getScoreColor(item.adherenceScore)}">Adherence: ${item.adherenceScore}/10</span>
+            </div>
+
+            <p style="font-size: 0.75rem; color: var(--text-main); line-height: 1.4; margin: 0;"><strong>Q:</strong> "${item.userPrompt}"</p>
+            <p style="font-size: 0.75rem; color: var(--text-muted); line-height: 1.4; margin: 0; background: rgba(0,0,0,0.15); padding: 0.4rem 0.6rem; border-radius: 6px;"><strong>Judge Justification:</strong> ${item.justification}</p>
+          </div>
+        `;
+      }).join('');
+    }
+  } catch (err) {
+    evaluationsList.innerHTML = `<div class="chat-msg-error">Failed to load evaluations: ${err.message}</div>`;
+  }
+}
+
+// Bind event listeners
+if (sideNavChat) sideNavChat.addEventListener("click", switchToChat);
+if (sideNavAnalyzer) sideNavAnalyzer.addEventListener("click", () => switchToAnalyzer(true));
+if (sideNavLibrary) sideNavLibrary.addEventListener("click", switchToLibrary);
+if (sideNavTelemetry) sideNavTelemetry.addEventListener("click", switchToTelemetry);
+
+if (sideBtnNewChat) sideBtnNewChat.addEventListener("click", resetTutorChat);
+if (btnRefreshTelemetry) btnRefreshTelemetry.addEventListener("click", loadTelemetryLogs);
+
+if (cardVideoAi) cardVideoAi.addEventListener("click", switchToAnalyzer);
+if (cardLibrary) cardLibrary.addEventListener("click", switchToLibrary);
+if (cardDiagnostic) cardDiagnostic.addEventListener("click", () => {
+  switchToChat();
+  startDiagnosticQuizDirectly();
 });
 
+// Prompt Box Input Event Listeners
+if (mainChatInput) {
+  mainChatInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMainChatMsg();
+    }
+  });
+}
+if (btnChatSend) btnChatSend.addEventListener("click", sendMainChatMsg);
+
+// Suggestion pills clicks
+document.addEventListener("click", (e) => {
+  const pill = e.target.closest(".suggestion-pill");
+  if (pill) {
+    const promptText = pill.getAttribute("data-prompt");
+    if (mainChatInput && promptText) {
+      mainChatInput.value = promptText;
+      sendMainChatMsg();
+    }
+  }
+});
+
+// Initialize switcher hook to Chat by default
+document.addEventListener("DOMContentLoaded", () => {
+  switchToChat();
+  loadCourses();
+});

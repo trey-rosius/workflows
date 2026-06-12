@@ -25,95 +25,289 @@
     </button>
     <div id="sidebar-overlay" class="sidebar-overlay"></div>
 
-    <!-- Sidebar: Upload Zone & Historical Files -->
+    <!-- Sidebar: Sleek Left Panel -->
     <aside id="sidebar" class="sidebar">
-      <header class="sidebar-header">
-        <div class="logo">
-          <div class="logo-icon">✨</div>
-          <span class="logo-text">EduCloud AI</span>
+      <header class="sidebar-header" style="margin-bottom: 1.5rem;">
+        <div class="logo" style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <svg class="logo-icon-svg" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink: 0;">
+              <circle cx="12" cy="12" r="10" fill="url(#logoGrad)" />
+              <path d="M12 6L14 10L18 12L14 14L12 18L10 14L6 12L10 10L12 6Z" fill="white" />
+              <defs>
+                <linearGradient id="logoGrad" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+                  <stop stop-color="#a855f7" />
+                  <stop offset="1" stop-color="#6366f1" />
+                </linearGradient>
+              </defs>
+            </svg>
+            <span class="logo-text-sleek" style="font-family: var(--font-family); font-weight: 700; font-size: 1.25rem; color: var(--text-bright); letter-spacing: -0.5px;">Zyricon</span>
+          </div>
+          <div class="header-divider" style="width: 1px; height: 16px; background: rgba(255, 255, 255, 0.08); margin: 0 0.5rem 0 1rem; display: inline-block;"></div>
+          <button id="btn-collapse-sidebar" style="background: transparent; border: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0.25rem; transition: var(--transition-smooth); outline: none;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+              <line x1="9" y1="3" x2="9" y2="21" />
+            </svg>
+          </button>
         </div>
-        <p class="subtitle">Video Learning Assistant</p>
       </header>
 
-      <!-- Navigation for Switching Views -->
-      <nav class="sidebar-nav" style="margin-bottom: 1.5rem; display: flex; gap: 0.5rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem;">
-        <button id="nav-btn-analyzer" class="sidebar-nav-item active" style="flex: 1; padding: 0.5rem; background: transparent; border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-main); cursor: pointer; font-family: var(--font-family); font-size: 0.8rem; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 0.25rem;">
-          📹 Video AI
-        </button>
-        <button id="nav-btn-courses" class="sidebar-nav-item" style="flex: 1; padding: 0.5rem; background: transparent; border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-muted); cursor: pointer; font-family: var(--font-family); font-size: 0.8rem; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 0.25rem;">
-          📚 Courses
-        </button>
-      </nav>
+      <button id="btn-new-chat-sidebar" class="btn-new-chat" style="display: flex; align-items: center; justify-content: center; gap: 0.5rem; width: 100%; padding: 0.7rem; border-radius: 20px; border: 1px solid rgba(255, 255, 255, 0.12); background: rgba(255, 255, 255, 0.03); color: var(--text-main); font-family: var(--font-family); font-size: 0.85rem; font-weight: 500; cursor: pointer; transition: var(--transition-smooth); margin-bottom: 1.5rem; outline: none;">
+        <span>＋</span> New Chat
+      </button>
 
-      <!-- Sidebar Contents for Analyzer -->
-      <div id="analyzer-sidebar-contents">
-        <!-- Drag & Drop Upload Zone -->
-        <section class="upload-section">
-          <div id="dropzone" class="dropzone">
-            <input type="file" id="file-input" accept="video/mp4,video/quicktime,video/webm" style="display: none;">
-            <div class="dropzone-content">
-              <span class="upload-icon">📤</span>
-              <p class="dropzone-text">Drag & drop video here or <span class="highlight">browse</span></p>
-              <p class="dropzone-hint">Supports MP4, MOV, WEBM (Max 500MB)</p>
+      <div class="sidebar-scrollable-content custom-scrollbar" style="flex-grow: 1; display: flex; flex-direction: column; gap: 1.5rem; overflow-y: auto; margin-bottom: 1rem; padding-right: 0.2rem;">
+        <!-- Navigation Menu -->
+        <div class="sidebar-section">
+          <h3 class="sidebar-section-title" style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.5px; margin-bottom: 0.75rem; padding-left: 0.5rem;">Menu</h3>
+          <ul class="sidebar-menu" style="list-style: none; display: flex; flex-direction: column; gap: 0.25rem; padding: 0; margin: 0;">
+            <li>
+              <button id="side-nav-chat" class="sidebar-menu-item active">
+                <span class="menu-icon-wrapper" style="display: flex; align-items: center; justify-content: center; width: 20px; height: 20px;">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                </span>
+                <span class="menu-label">AI Tutor Chat</span>
+              </button>
+            </li>
+            <li>
+              <button id="side-nav-analyzer" class="sidebar-menu-item">
+                <span class="menu-icon-wrapper" style="display: flex; align-items: center; justify-content: center; width: 20px; height: 20px;">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"></path><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
+                </span>
+                <span class="menu-label">Video AI Analyzer</span>
+              </button>
+            </li>
+            <li>
+              <button id="side-nav-library" class="sidebar-menu-item">
+                <span class="menu-icon-wrapper" style="display: flex; align-items: center; justify-content: center; width: 20px; height: 20px;">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+                </span>
+                <span class="menu-label">Course Library</span>
+              </button>
+            </li>
+            <li>
+              <button id="side-nav-telemetry" class="sidebar-menu-item">
+                <span class="menu-icon-wrapper" style="display: flex; align-items: center; justify-content: center; width: 20px; height: 20px;">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                </span>
+                <span class="menu-label">Telemetry & Evals</span>
+              </button>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Sidebar Contents for Course Portal (Initially Hidden, shown when studying a course) -->
+        <div id="courses-sidebar-contents" class="hidden" style="border-top: 1px solid rgba(255,255,255,0.06); padding-top: 1rem;">
+          <section class="courses-nav-section">
+            <h2 class="section-title">Course Navigator <span id="course-count-badge" class="badge">0</span></h2>
+            
+            <button id="btn-admin-ingest" class="btn-primary" style="width: 100%; margin-bottom: 1.25rem; font-size: 0.85rem; padding: 0.6rem; display: flex; align-items: center; justify-content: center; gap: 0.4rem; box-shadow: 0 4px 10px rgba(6, 182, 212, 0.2);">
+              <span>⚙️</span> Ingest Courses
+            </button>
+
+            <div id="courses-sidebar-list" class="video-list">
+              <!-- Dynamically populated courses -->
+              <div class="loading-spinner-small">Loading courses...</div>
             </div>
-          </div>
+          </section>
+        </div>
 
-          <!-- Active Upload Progress -->
-          <div id="upload-progress-container" class="upload-progress-container hidden">
-            <div class="progress-details">
-              <span id="upload-file-name">filename.mp4</span>
-              <span id="upload-percentage">0%</span>
+        <!-- Sidebar Contents for Analyzer (Initially Hidden, shown when not studying a course) -->
+        <div id="analyzer-sidebar-contents" class="hidden" style="border-top: 1px solid rgba(255,255,255,0.06); padding-top: 1rem;">
+          <!-- Video History Section -->
+          <section class="history-section">
+            <h2 class="section-title" style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.5px; margin-bottom: 0.75rem; display: flex; justify-content: space-between; align-items: center;">
+              <span>Analyzed Videos</span>
+              <span id="video-count-badge" class="badge">0</span>
+            </h2>
+            
+            <!-- Refresh Button -->
+            <button id="btn-refresh" class="btn-icon-text" style="width: 100%; margin-bottom: 0.75rem; font-size: 0.75rem; padding: 0.40rem; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; color: var(--text-main); cursor: pointer;">
+              <span>🔄</span> Refresh Library
+            </button>
+
+            <div id="video-list" class="video-list" style="display: flex; flex-direction: column; gap: 0.35rem; max-height: 250px; overflow-y: auto;">
+              <!-- Dynamically populated files -->
+              <div class="loading-spinner-small">Loading videos...</div>
             </div>
-            <div class="progress-bar-bg">
-              <div id="upload-progress-bar" class="progress-bar-fill" style="width: 0%;"></div>
-            </div>
-          </div>
-        </section>
-
-        <!-- Video History Section -->
-        <section class="history-section">
-          <h2 class="section-title">Your Videos <span id="video-count-badge" class="badge">0</span></h2>
-          
-          <!-- Refresh Button -->
-          <button id="btn-refresh" class="btn-icon-text">
-            <span>🔄</span> Refresh Library
-          </button>
-
-          <div id="video-list" class="video-list">
-            <!-- Dynamically populated files -->
-            <div class="loading-spinner-small">Loading videos...</div>
-          </div>
-        </section>
+          </section>
+        </div>
       </div>
 
-      <!-- Sidebar Contents for Course Portal -->
-      <div id="courses-sidebar-contents" class="hidden">
-        <section class="courses-nav-section">
-          <h2 class="section-title">Course Navigator <span id="course-count-badge" class="badge">0</span></h2>
-          
-          <button id="btn-admin-ingest" class="btn-primary" style="width: 100%; margin-bottom: 1.25rem; font-size: 0.85rem; padding: 0.6rem; display: flex; align-items: center; justify-content: center; gap: 0.4rem; box-shadow: 0 4px 10px rgba(6, 182, 212, 0.2);">
-            <span>⚙️</span> Ingest Courses
-          </button>
-
-          <div id="courses-sidebar-list" class="video-list">
-            <!-- Dynamically populated courses -->
-            <div class="loading-spinner-small">Loading courses...</div>
-          </div>
-        </section>
+      <!-- Upgrade to Premium Bottom Card -->
+      <div class="sidebar-premium-card" style="margin-top: auto; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(147, 51, 234, 0.15); border-radius: 12px; padding: 1rem; position: relative; overflow: hidden; flex-shrink: 0; display: flex; flex-direction: column; gap: 0.5rem;">
+        <div style="position: absolute; top: -10px; right: -10px; width: 60px; height: 60px; background: radial-gradient(circle, rgba(147, 51, 234, 0.15) 0%, transparent 70%); pointer-events: none;"></div>
+        <div class="premium-crown-circle" style="display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 50%; color: #c084fc; font-size: 0.9rem;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M2 4l3 12h14l3-12-6 7-4-7-4 7-6-7z" />
+          </svg>
+        </div>
+        <h4 style="font-size: 0.85rem; font-weight: 600; color: var(--text-bright); margin: 0;">Upgrade to premium</h4>
+        <p style="font-size: 0.75rem; color: var(--text-muted); line-height: 1.3; margin: 0;">Boost productivity with seamless automation and responsive AI built to adapt to your needs.</p>
       </div>
     </aside>
 
     <!-- Main Workspace: Video Player & Generated Insights -->
-    <main class="main-content">
-      <!-- CONTAINER 1: Video Analyzer Workspace -->
-      <div id="analyzer-workspace-container" class="workspace-tab-container" style="height: 100%; display: flex; flex-direction: column;">
+    <main class="main-content" style="flex-grow: 1; overflow: hidden; background: radial-gradient(circle at center, #1b0c30 0%, #080312 100%); display: flex; flex-direction: column; position: relative;">
+      
+      <!-- TAB 1: Chat Dashboard (Zyricon style) -->
+      <div id="chat-workspace-container" class="workspace-tab-container" style="height: 100%; display: flex; flex-direction: column; overflow: hidden; position: relative; padding: 1.5rem 2rem 2rem 2rem;">
+        <!-- Top Bar -->
+        <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-shrink: 0; width: 100%;">
+          <div class="model-selector-container">
+            <select id="select-model" style="background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 20px; color: var(--text-main); padding: 0.45rem 1.4rem; font-family: var(--font-family); font-size: 0.8rem; font-weight: 600; cursor: pointer; outline: none; appearance: none; -webkit-appearance: none; padding-right: 2.2rem; background-image: url('data:image/svg+xml;utf8,<svg xmlns=&quot;http://www.w3.org/2000/svg&quot; width=&quot;24&quot; height=&quot;24&quot; fill=&quot;rgba(255,255,255,0.7)&quot;><path d=&quot;M7 10l5 5 5-5z&quot;/></svg>'); background-repeat: no-repeat; background-position: right 0.8rem center; background-size: 1rem;">
+              <option value="nova-lite">🤖 Nova Lite v1.0 (Fast)</option>
+              <option value="nova-pro">🧠 Nova Pro v1.0 (Complex)</option>
+            </select>
+          </div>
+          <div style="display: flex; gap: 0.75rem; align-items: center;">
+            <button id="btn-chat-config" style="background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 20px; color: var(--text-main); padding: 0.45rem 1.2rem; font-family: var(--font-family); font-size: 0.8rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; transition: var(--transition-smooth); outline: none;">
+              ⚙️ Configuration
+            </button>
+            <button id="btn-chat-export" style="background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 20px; color: var(--text-main); padding: 0.45rem 1.2rem; font-family: var(--font-family); font-size: 0.8rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; transition: var(--transition-smooth); outline: none;">
+              📤 Export
+            </button>
+          </div>
+        </header>
+
+        <!-- Dynamic Chat Area -->
+        <div style="flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; width: 100%;">
+          
+          <!-- Welcome Screen (Default empty state) -->
+          <div id="main-chat-welcome" style="display: flex; flex-direction: column; justify-content: center; align-items: center; flex-grow: 1; text-align: center; padding: 1.5rem 1rem;">
+            <!-- Glowing Purple Orb -->
+            <div class="purple-orb-wrapper" style="display: flex; justify-content: center; align-items: center; margin-bottom: 2rem;">
+              <div class="glowing-purple-orb"></div>
+            </div>
+            
+            <h1 class="welcome-heading" style="font-family: var(--font-family); font-weight: 600; font-size: 2.5rem; color: var(--text-bright); text-align: center; margin-bottom: 2rem; letter-spacing: -0.5px;">Ready to Create Something New?</h1>
+            
+            <!-- Suggestions Pills -->
+            <div class="suggestion-pills-container" style="display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; margin-bottom: 1.5rem; max-width: 650px; margin-left: auto; margin-right: auto;">
+              <button class="suggestion-pill" data-prompt="Start Diagnostic Quiz" style="display: flex; align-items: center; gap: 0.5rem; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 20px; padding: 0.55rem 1.25rem; color: var(--text-main); font-family: var(--font-family); font-size: 0.8rem; font-weight: 500; cursor: pointer; transition: var(--transition-smooth); outline: none;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-muted);"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                Create Study Guide
+              </button>
+              <button class="suggestion-pill" data-prompt="Explain the difference between S3 and CloudFront using an analogy" style="display: flex; align-items: center; gap: 0.5rem; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 20px; padding: 0.55rem 1.25rem; color: var(--text-main); font-family: var(--font-family); font-size: 0.8rem; font-weight: 500; cursor: pointer; transition: var(--transition-smooth); outline: none;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-muted);"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 1 1 7.072 0l-.548.547A3.374 3.374 0 0 0 14 18.469V19a2 2 0 0 1-2 2h0a2 2 0 0 1-2-2v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+                Brainstorm Concepts
+              </button>
+              <button class="suggestion-pill" data-prompt="Recommend courses related to AWS AppSync and serverless" style="display: flex; align-items: center; gap: 0.5rem; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 20px; padding: 0.55rem 1.25rem; color: var(--text-main); font-family: var(--font-family); font-size: 0.8rem; font-weight: 500; cursor: pointer; transition: var(--transition-smooth); outline: none;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-muted);"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+                Make Learning Plan
+              </button>
+            </div>
+          </div>
+
+          <!-- Chat Stream (Initially Hidden, shown when messages sent) -->
+          <div id="main-chat-stream" class="hidden custom-scrollbar" style="flex-grow: 1; overflow-y: auto; padding: 1rem 0; display: flex; flex-direction: column; gap: 1.25rem; width: 100%; max-width: 800px; margin-left: auto; margin-right: auto; padding-right: 0.5rem;">
+            <!-- Message bubbles -->
+          </div>
+
+          <!-- Prompt Box -->
+          <!-- Prompt Box -->
+          <div class="main-prompt-box-wrapper" style="width: 100%; max-width: 800px; margin-left: auto; margin-right: auto; margin-top: auto; padding-top: 1rem; flex-shrink: 0;">
+            <div class="main-prompt-box" style="background: rgba(21, 18, 27, 0.7); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 16px; padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem; position: relative;">
+              <div style="display: flex; gap: 0.75rem; align-items: flex-start;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="color: #a855f7; flex-shrink: 0; margin-top: 0.15rem;">
+                  <path d="M12 3L14.4 9.6L21 12L14.4 14.4L12 21L9.6 14.4L3 12L9.6 9.6L12 3Z" fill="currentColor"/>
+                </svg>
+                <textarea id="main-chat-input" placeholder="Ask Anything..." rows="2" style="flex-grow: 1; background: transparent; border: none; resize: none; outline: none; color: var(--text-bright); font-family: var(--font-family); font-size: 0.95rem; line-height: 1.5; padding: 0.25rem 0;" class="custom-scrollbar"></textarea>
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 0.75rem; margin-top: 0.25rem;">
+                <div style="display: flex; gap: 0.25rem;">
+                  <button class="chat-action-btn" title="Attach file" style="background: transparent; border: none; color: var(--text-muted); cursor: pointer; padding: 0.35rem 0.6rem; font-size: 0.8rem; display: flex; align-items: center; gap: 0.4rem; transition: var(--transition-smooth); outline: none; border-radius: 6px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+                    <span style="font-size: 0.75rem; font-weight: 500;">Attach</span>
+                  </button>
+                  <button class="chat-action-btn" title="Settings" style="background: transparent; border: none; color: var(--text-muted); cursor: pointer; padding: 0.35rem 0.6rem; font-size: 0.8rem; display: flex; align-items: center; gap: 0.4rem; transition: var(--transition-smooth); outline: none; border-radius: 6px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>
+                    <span style="font-size: 0.75rem; font-weight: 500;">Settings</span>
+                  </button>
+                  <button class="chat-action-btn" title="Options" style="background: transparent; border: none; color: var(--text-muted); cursor: pointer; padding: 0.35rem 0.6rem; font-size: 0.8rem; display: flex; align-items: center; gap: 0.4rem; transition: var(--transition-smooth); outline: none; border-radius: 6px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                    <span style="font-size: 0.75rem; font-weight: 500;">Options</span>
+                  </button>
+                </div>
+                <div style="display: flex; gap: 0.75rem; align-items: center;">
+                  <button id="btn-chat-mic" style="background: transparent; border: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0.25rem; transition: var(--transition-smooth); outline: none;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+                  </button>
+                  <button id="btn-chat-send" style="width: 32px; height: 32px; border-radius: 50%; background: #a855f7; border: none; color: white; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: var(--transition-smooth); outline: none; box-shadow: 0 4px 12px rgba(168, 85, 247, 0.3); display: flex; align-items: center; justify-content: center;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Feature Cards at the Bottom (Only visible when welcome is shown) -->
+          <div id="main-chat-feature-cards" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; width: 100%; max-width: 800px; margin-left: auto; margin-right: auto; margin-top: 1.5rem; flex-shrink: 0;">
+            <div id="card-video-ai" class="feature-card-item" style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; padding: 1rem; cursor: pointer; display: flex; align-items: center; gap: 1rem; transition: var(--transition-smooth);">
+              <div class="feature-card-icon-wrapper" style="display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.1); background: rgba(255, 255, 255, 0.02); flex-shrink: 0;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-bright);"><path d="M23 7l-7 5 7 5V7z"></path><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+                <span class="feature-card-badge" style="font-size: 0.65rem; background: rgba(255, 255, 255, 0.06); padding: 0.15rem 0.5rem; border-radius: 10px; color: var(--text-muted); font-weight: 600; width: fit-content; text-transform: uppercase; letter-spacing: 0.5px;">Analyze Video</span>
+                <h4 class="feature-card-title" style="font-size: 0.85rem; font-weight: 600; color: var(--text-bright); margin: 0;">Video AI Analyzer</h4>
+              </div>
+            </div>
+            
+            <div id="card-library" class="feature-card-item" style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; padding: 1rem; cursor: pointer; display: flex; align-items: center; gap: 1rem; transition: var(--transition-smooth);">
+              <div class="feature-card-icon-wrapper" style="display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.1); background: rgba(255, 255, 255, 0.02); flex-shrink: 0;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-bright);"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+                <span class="feature-card-badge" style="font-size: 0.65rem; background: rgba(255, 255, 255, 0.06); padding: 0.15rem 0.5rem; border-radius: 10px; color: var(--text-muted); font-weight: 600; width: fit-content; text-transform: uppercase; letter-spacing: 0.5px;">Open Library</span>
+                <h4 class="feature-card-title" style="font-size: 0.85rem; font-weight: 600; color: var(--text-bright); margin: 0;">Course Library</h4>
+              </div>
+            </div>
+            
+            <div id="card-diagnostic" class="feature-card-item" style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; padding: 1rem; cursor: pointer; display: flex; align-items: center; gap: 1rem; transition: var(--transition-smooth);">
+              <div class="feature-card-icon-wrapper" style="display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.1); background: rgba(255, 255, 255, 0.02); flex-shrink: 0;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-bright);"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+                <span class="feature-card-badge" style="font-size: 0.65rem; background: rgba(255, 255, 255, 0.06); padding: 0.15rem 0.5rem; border-radius: 10px; color: var(--text-muted); font-weight: 600; width: fit-content; text-transform: uppercase; letter-spacing: 0.5px;">Start Quiz</span>
+                <h4 class="feature-card-title" style="font-size: 0.85rem; font-weight: 600; color: var(--text-bright); margin: 0;">Diagnostic Quiz</h4>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+      
+      <!-- TAB 2: Video Analyzer Workspace (Original Container 1, hidden by default) -->
+      <div id="analyzer-workspace-container" class="workspace-tab-container hidden" style="height: 100%; display: flex; flex-direction: column;">
         <!-- Welcome Screen (Default) -->
         <section id="welcome-screen" class="welcome-screen">
-          <div class="welcome-card">
+          <div class="welcome-card" style="max-width: 600px; width: 100%;">
             <div class="welcome-hero">📚</div>
             <h1>Welcome to EduCloud AI</h1>
-            <p>Analyze educational videos instantly. Extract rich structured summaries, generate recall assessment questions, and study with interactive 3D flashcards powered by Strands Agents and Bedrock Nova Pro.</p>
-            <div class="welcome-actions">
+            <p style="margin-bottom: 1.5rem;">Analyze educational videos instantly. Extract rich structured summaries, generate recall assessment questions, and study with interactive 3D flashcards powered by Strands Agents and Bedrock Nova Pro.</p>
+            
+            <!-- Drag & Drop Upload Zone -->
+            <div id="dropzone" class="dropzone" style="margin-bottom: 1rem;">
+              <input type="file" id="file-input" accept="video/mp4,video/quicktime,video/webm" style="display: none;">
+              <div class="dropzone-content">
+                <span class="upload-icon">📤</span>
+                <p class="dropzone-text">Drag & drop video here or <span class="highlight">browse</span></p>
+                <p class="dropzone-hint">Supports MP4, MOV, WEBM (Max 500MB)</p>
+              </div>
+            </div>
+
+            <!-- Active Upload Progress -->
+            <div id="upload-progress-container" class="upload-progress-container hidden">
+              <div class="progress-details" style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 0.4rem;">
+                <span id="upload-file-name" style="color: var(--text-main); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 75%;">filename.mp4</span>
+                <span id="upload-percentage" style="color: var(--accent-purple); font-weight: 600;">0%</span>
+              </div>
+              <div class="progress-bar-bg" style="width: 100%; height: 6px; background: rgba(255,255,255,0.08); border-radius: 4px; overflow: hidden;">
+                <div id="upload-progress-bar" class="progress-bar-fill" style="width: 0%; height: 100%; background: var(--accent-gradient); transition: width 0.1s ease; border-radius: 4px;"></div>
+              </div>
+            </div>
+            
+            <div class="welcome-actions" style="margin-top: 1rem; display: none;">
               <button id="btn-welcome-browse" class="btn-primary">Browse Video File</button>
             </div>
           </div>
@@ -380,8 +574,8 @@
             </div>
           </div>
 
-          <footer style="padding: 1rem; border-top: 1px solid var(--border-color); display: flex; gap: 0.5rem; background-color: var(--bg-secondary);">
-            <input type="text" id="chatbot-input" placeholder="Ask a question about the course..." style="flex-grow: 1; padding: 0.6rem; background-color: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-main); font-size: 0.85rem; font-family: var(--font-family);" />
+          <footer style="padding: 1rem; border-top: 1px solid var(--border-color); display: flex; gap: 0.5rem; background-color: var(--bg-secondary); flex-shrink: 0; width: 100%;">
+            <input type="text" id="chatbot-input" placeholder="Ask a question about the course..." style="flex-grow: 1; padding: 0.6rem; background-color: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-main); font-size: 0.85rem; font-family: var(--font-family); outline: none;" />
             <button id="btn-send-chatbot" class="btn-primary" style="padding: 0.5rem 1rem; font-size: 0.85rem;">
               Send
             </button>
@@ -389,7 +583,72 @@
         </div>
         </div>
       </div>
+
+      <!-- TAB 4: Telemetry Logs Dashboard -->
+      <div id="telemetry-workspace-container" class="workspace-tab-container hidden" style="height: 100%; display: flex; flex-direction: column; overflow: hidden; padding: 2rem 2.5rem 2rem 2.5rem;">
+        <header style="margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; width: 100%;">
+          <div>
+            <h1 style="font-size: 1.8rem; font-weight: 800; background: var(--accent-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-family: var(--font-family); margin: 0; letter-spacing: -0.5px;">Telemetry & Evaluations</h1>
+            <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.25rem; font-family: var(--font-family);">Monitor student content demand gaps and automated LLM-as-a-Judge evaluations.</p>
+          </div>
+          <button id="btn-refresh-telemetry" class="btn-primary" style="padding: 0.5rem 1.2rem; font-size: 0.8rem; display: flex; align-items: center; gap: 0.4rem; border-radius: 20px; font-weight: 600; box-shadow: 0 4px 10px rgba(139, 92, 246, 0.2);">
+            🔄 Refresh Logs
+          </button>
+        </header>
+
+        <div style="display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 1.5rem; flex-grow: 1; overflow: hidden; height: calc(100% - 80px);">
+          <!-- Column 1: Content Demand Telemetry (Missing course requests) -->
+          <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 16px; padding: 1.25rem; display: flex; flex-direction: column; overflow: hidden;">
+            <h2 style="font-size: 1.05rem; font-weight: 700; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; color: var(--text-bright); font-family: var(--font-family);">
+              🔍 Content Demand Telemetry <span id="telemetry-count-badge" class="badge">0</span>
+            </h2>
+            <div id="telemetry-list" style="flex-grow: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 0.75rem; padding-right: 0.25rem;" class="custom-scrollbar">
+              <div class="text-muted" style="text-align: center; margin-top: 3rem; font-size: 0.85rem;">No telemetry events recorded yet. Try asking for Azure/GCP topics to trigger logging.</div>
+            </div>
+          </div>
+
+          <!-- Column 2: LLM-as-a-Judge Evaluations -->
+          <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 16px; padding: 1.25rem; display: flex; flex-direction: column; overflow: hidden;">
+            <h2 style="font-size: 1.05rem; font-weight: 700; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; color: var(--text-bright); font-family: var(--font-family);">
+              ⚖️ LLM-as-a-Judge Evaluations <span id="evaluations-count-badge" class="badge">0</span>
+            </h2>
+            <div id="evaluations-list" style="flex-grow: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 0.75rem; padding-right: 0.25rem;" class="custom-scrollbar">
+              <div class="text-muted" style="text-align: center; margin-top: 3rem; font-size: 0.85rem;">No log evaluations available yet. Runs automatically at midnight or via manual trigger.</div>
+            </div>
+          </div>
+        </div>
+      </div>
     </main>
+  </div>
+
+  <!-- Prerequisite Check modal ("Am I Ready?" Gateway) -->
+  <div id="prereq-modal" class="modal-overlay hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); display: flex; align-items: center; justify-content: center; z-index: 1000; backdrop-filter: blur(8px); transition: all 0.3s ease;">
+    <div class="modal-card" style="background: hsl(222, 40%, 11%); border: 1px solid var(--border-color); border-radius: 12px; width: 90%; max-width: 500px; padding: 2rem; box-shadow: 0 10px 40px rgba(0,0,0,0.6); position: relative; font-family: var(--font-family); color: var(--text-main);">
+      <button id="btn-close-prereq" style="position: absolute; top: 1rem; right: 1rem; background: transparent; border: none; color: var(--text-muted); font-size: 1.2rem; cursor: pointer;">❌</button>
+      <div style="font-size: 3rem; text-align: center; margin-bottom: 1rem;">⚠️</div>
+      <h2 style="font-size: 1.5rem; font-weight: 700; text-align: center; margin-bottom: 0.5rem; color: var(--text-bright);">Are You Ready for this Lesson?</h2>
+      <p id="prereq-text" style="font-size: 0.9rem; color: var(--text-muted); line-height: 1.5; text-align: center; margin-bottom: 1.5rem;">This lesson requires knowledge of GraphQL. Would you like a quick 2-minute interactive refresher first?</p>
+      <div style="display: flex; gap: 1rem; justify-content: center;">
+        <button id="btn-prereq-quiz" class="btn-primary" style="padding: 0.6rem 1.2rem; font-size: 0.85rem;">Take Quick Refresher</button>
+        <button id="btn-prereq-skip" class="btn-secondary" style="padding: 0.6rem 1.2rem; font-size: 0.85rem;">I'm Ready, Skip</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Interactive Refresher Quiz Modal -->
+  <div id="refresher-quiz-modal" class="modal-overlay hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); display: flex; align-items: center; justify-content: center; z-index: 1001; backdrop-filter: blur(8px); transition: all 0.3s ease;">
+    <div class="modal-card" style="background: hsl(222, 40%, 11%); border: 1px solid var(--border-color); border-radius: 12px; width: 90%; max-width: 500px; padding: 2rem; box-shadow: 0 10px 40px rgba(0,0,0,0.6); position: relative; font-family: var(--font-family); color: var(--text-main);">
+      <button id="btn-close-refresher" style="position: absolute; top: 1rem; right: 1rem; background: transparent; border: none; color: var(--text-muted); font-size: 1.2rem; cursor: pointer;">❌</button>
+      <h2 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 1rem; color: var(--text-bright);" id="refresher-title">Quick GraphQL Refresher</h2>
+      <div id="refresher-question-container">
+        <p style="font-size: 0.95rem; font-weight: 600; margin-bottom: 1rem;" id="refresher-question">Question text...</p>
+        <div id="refresher-options" style="display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.5rem;">
+          <!-- Options -->
+        </div>
+      </div>
+      <div id="refresher-feedback" class="hidden" style="margin-bottom: 1.5rem; padding: 0.75rem; border-radius: 8px; font-size: 0.85rem;"></div>
+      <button id="btn-refresher-action" class="btn-primary" style="width: 100%; padding: 0.6rem; font-size: 0.85rem; font-weight: 600;">Submit Answer</button>
+    </div>
   </div>
 
   <!-- Markdown & Code Highlighting Libraries -->
