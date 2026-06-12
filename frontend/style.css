@@ -2648,3 +2648,83 @@ body {
   color: var(--text-muted) !important;
 }
 
+/* ========================================== */
+/* ADDITIONAL MOBILE RESPONSIVENESS OVERRIDES  */
+/* ========================================== */
+@media (max-width: 768px) {
+  /* Welcome heading styling */
+  .welcome-heading {
+    font-size: 1.6rem !important;
+    margin-bottom: 1.25rem !important;
+    line-height: 1.3 !important;
+  }
+  
+  /* Feature cards: stack vertically on mobile */
+  #main-chat-feature-cards {
+    grid-template-columns: 1fr !important;
+    gap: 0.75rem !important;
+    margin-top: 1rem !important;
+  }
+  
+  /* Telemetry container padding and layout */
+  #telemetry-workspace-container {
+    padding: 1rem !important;
+  }
+  
+  #telemetry-workspace-container > header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 0.75rem !important;
+  }
+  
+  #telemetry-workspace-container > header h1 {
+    font-size: 1.4rem !important;
+  }
+  
+  #telemetry-workspace-container > div[style*="display: grid"] {
+    grid-template-columns: 1fr !important;
+    gap: 1.25rem !important;
+  }
+  
+  /* Chat workspace container padding */
+  #chat-workspace-container {
+    padding: 1rem 0.75rem !important;
+  }
+  
+  /* Welcome orb wrapper adjustment */
+  .purple-orb-wrapper {
+    margin-bottom: 1rem !important;
+  }
+  
+  /* Chat top bar adjustments */
+  #chat-workspace-container > header {
+    flex-wrap: wrap !important;
+    gap: 0.75rem !important;
+    margin-bottom: 1rem !important;
+  }
+  
+  .model-selector-container {
+    width: 100% !important;
+  }
+  
+  .model-selector-container select {
+    width: 100% !important;
+  }
+
+  .workspace-header > div {
+    max-width: 100% !important;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Hide text labels in chat action buttons to fit small screens */
+  .chat-action-btn span {
+    display: none !important;
+  }
+  
+  .chat-action-btn {
+    padding: 0.4rem !important;
+  }
+}
+
+

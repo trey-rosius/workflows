@@ -1513,29 +1513,15 @@ window.renderHeaderActions = renderHeaderActions;
 
   overlay.addEventListener("click", closeSidebar);
 
-  // Auto-close sidebar on mobile when a video is selected
-  const origSelectVideo = window.selectVideo || selectVideo;
-  const wrappedSelectVideo = async function(videoUri) {
-    if (window.innerWidth <= 768) {
-      closeSidebar();
-    }
-    // selectVideo is declared with async function, call it directly
-    return origSelectVideo(videoUri);
-  };
-  // Expose wrapped version for onclick handlers
-  window.selectVideoMobile = wrappedSelectVideo;
+  // Expose globally for navigation and selection auto-closing
+  window.closeMobileSidebar = closeSidebar;
 })();
 
 // Override selectVideo on global scope so onclick="selectVideo(...)" in sidebar auto-closes on mobile
 const _origSelectVideoForMobile = selectVideo;
 window.selectVideo = async function(videoUri) {
-  if (window.innerWidth <= 768) {
-    const sidebar = document.getElementById("sidebar");
-    const overlay = document.getElementById("sidebar-overlay");
-    const toggleBtn = document.getElementById("mobile-menu-toggle");
-    if (sidebar) sidebar.classList.remove("open");
-    if (overlay) overlay.classList.remove("visible");
-    if (toggleBtn) toggleBtn.classList.remove("active");
+  if (window.innerWidth <= 768 && typeof window.closeMobileSidebar === "function") {
+    window.closeMobileSidebar();
   }
   return _origSelectVideoForMobile(videoUri);
 };
@@ -1643,6 +1629,9 @@ function renderCourses() {
 }
 
 window.selectCourse = function(courseId) {
+  if (window.innerWidth <= 768 && typeof window.closeMobileSidebar === "function") {
+    window.closeMobileSidebar();
+  }
   const course = courses.find(c => c.courseId === courseId);
   if (!course) return;
   
@@ -2606,6 +2595,9 @@ function hideAllWorkspaceContainers() {
 }
 
 window.switchToChat = function() {
+  if (window.innerWidth <= 768 && typeof window.closeMobileSidebar === "function") {
+    window.closeMobileSidebar();
+  }
   clearActiveSideNav();
   if (sideNavChat) sideNavChat.classList.add("active");
   hideAllWorkspaceContainers();
@@ -2616,6 +2608,9 @@ window.switchToChat = function() {
 };
 
 window.switchToAnalyzer = function(showUpload = true) {
+  if (window.innerWidth <= 768 && typeof window.closeMobileSidebar === "function") {
+    window.closeMobileSidebar();
+  }
   clearActiveSideNav();
   if (sideNavAnalyzer) sideNavAnalyzer.classList.add("active");
   hideAllWorkspaceContainers();
@@ -2632,6 +2627,9 @@ window.switchToAnalyzer = function(showUpload = true) {
 };
 
 window.switchToLibrary = function() {
+  if (window.innerWidth <= 768 && typeof window.closeMobileSidebar === "function") {
+    window.closeMobileSidebar();
+  }
   clearActiveSideNav();
   if (sideNavLibrary) sideNavLibrary.classList.add("active");
   hideAllWorkspaceContainers();
@@ -2650,6 +2648,9 @@ window.switchToLibrary = function() {
 };
 
 window.switchToTelemetry = function() {
+  if (window.innerWidth <= 768 && typeof window.closeMobileSidebar === "function") {
+    window.closeMobileSidebar();
+  }
   clearActiveSideNav();
   if (sideNavTelemetry) sideNavTelemetry.classList.add("active");
   hideAllWorkspaceContainers();
