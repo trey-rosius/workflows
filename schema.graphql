@@ -101,7 +101,7 @@ type Mutation {
   triggerCourseIngestion(s3ZipKey: String!): Boolean! @aws_api_key @aws_cognito_user_pools
   generateQuizForLesson(courseId: String!, moduleId: String!, lessonId: String!): String! @aws_api_key @aws_cognito_user_pools
   generateFlashcardsForLesson(courseId: String!, moduleId: String!, lessonId: String!): String! @aws_api_key @aws_cognito_user_pools
-  publishChatbotChunk(sessionId: String!, chunk: String!, isComplete: Boolean!): ChatbotChunk! @aws_api_key @aws_cognito_user_pools
+  publishChatbotChunk(sessionId: String!, chunk: String!, isComplete: Boolean!, sequence: Int!): ChatbotChunk! @aws_api_key @aws_cognito_user_pools
 }
 
 type CourseAssets @aws_api_key @aws_cognito_user_pools {
@@ -181,6 +181,7 @@ type ChatbotChunk @aws_api_key @aws_cognito_user_pools {
   sessionId: String!
   chunk: String!
   isComplete: Boolean!
+  sequence: Int!
 }
 
 schema {

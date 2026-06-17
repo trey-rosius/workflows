@@ -136,11 +136,23 @@ export class AppSyncConstruct extends Construct {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
+    // Immutable audit log of every user prompt sent to the chatbot.
+    // Partitioned by sessionId with a timestamp sort key so all prompts for a
+    // session are retrievable in order; a TTL attribute lets old records expire.
+    const promptAuditTable = new dynamodb.Table(this, "PromptAuditTable", {
+      tableName: `${cdk.Stack.of(this).account}-${cdk.Stack.of(this).region}-prompt-audit-table`,
+      partitionKey: { name: "sessionId", type: dynamodb.AttributeType.STRING },
+      sortKey: { name: "timestamp", type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      timeToLiveAttribute: "ttl",
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+
     const tutorGuardrail = new bedrock.CfnGuardrail(this, "TutorGuardrail", {
       name: `TutorGuardrail-${cdk.Stack.of(this).stackName}-${cdk.Stack.of(this).region}`,
       description: "Guardrails for Educloud Tutor Agent",
-      blockedInputMessaging: "I am an educational tutor and can only assist with curriculum-related questions.",
-      blockedOutputsMessaging: "I am an educational tutor and can only assist with curriculum-related questions.",
+      blockedInputMessaging: "I am an educational tutor and can only assist with course-related, cloud development, and educational questions.",
+      blockedOutputsMessaging: "I am an educational tutor and can only assist with course-related, cloud development, and educational questions.",
       topicPolicyConfig: {
         topicsConfig: [
           {
@@ -151,11 +163,6 @@ export class AppSyncConstruct extends Construct {
           {
             name: "Financial Advice",
             definition: "Providing financial recommendations, investment advice, stock predictions, or commercial business advice.",
-            type: "DENY"
-          },
-          {
-            name: "Non-Educational Software Development",
-            definition: "Requests to build complete commercial products, write production-grade systems, develop software for personal business startups, or general non-educational programming projects.",
             type: "DENY"
           }
         ]
@@ -171,7 +178,7 @@ export class AppSyncConstruct extends Construct {
       }
     });
 
-    const tutorGuardrailVersion = new bedrock.CfnGuardrailVersion(this, "TutorGuardrailVersionV3", {
+    const tutorGuardrailVersion = new bedrock.CfnGuardrailVersion(this, "TutorGuardrailVersionV6", {
       guardrailIdentifier: tutorGuardrail.attrGuardrailId,
       description: "Updated version of TutorGuardrail with refined topics"
     });
@@ -537,6 +544,7 @@ export class AppSyncConstruct extends Construct {
         VECTOR_INDEX_NAME: vectorIndex.indexName,
         CONTENT_DEMAND_TELEMETRY_TABLE_NAME: contentDemandTelemetryTable.tableName,
         CHAT_EVALUATIONS_TABLE_NAME: chatEvaluationsTable.tableName,
+        PROMPT_AUDIT_TABLE_NAME: promptAuditTable.tableName,
         TUTOR_GUARDRAIL_ID: tutorGuardrail.attrGuardrailId,
         TUTOR_GUARDRAIL_VERSION: tutorGuardrailVersion.attrVersion,
         APPSYNC_ENDPOINT: this.api.graphqlUrl,
@@ -548,6 +556,7 @@ export class AppSyncConstruct extends Construct {
     chatSessionsTable.grantReadWriteData(askChatbotFunction);
     contentDemandTelemetryTable.grantReadWriteData(askChatbotFunction);
     chatEvaluationsTable.grantReadData(askChatbotFunction);
+    promptAuditTable.grantWriteData(askChatbotFunction);
 
     askChatbotFunction.addToRolePolicy(
       new iam.PolicyStatement({

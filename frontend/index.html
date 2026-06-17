@@ -93,6 +93,14 @@
                 <span class="menu-label">Telemetry & Evals</span>
               </button>
             </li>
+            <li>
+              <button id="side-nav-demand" class="sidebar-menu-item">
+                <span class="menu-icon-wrapper" style="display: flex; align-items: center; justify-content: center; width: 20px; height: 20px;">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                </span>
+                <span class="menu-label">Demanded Content</span>
+              </button>
+            </li>
           </ul>
         </div>
 
@@ -615,6 +623,48 @@
             <div id="evaluations-list" style="flex-grow: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 0.75rem; padding-right: 0.25rem;" class="custom-scrollbar">
               <div class="text-muted" style="text-align: center; margin-top: 3rem; font-size: 0.85rem;">No log evaluations available yet. Runs automatically at midnight or via manual trigger.</div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 5: Content Demand Dashboard -->
+      <div id="demand-workspace-container" class="workspace-tab-container hidden" style="height: 100%; display: flex; flex-direction: column; overflow: hidden; padding: 2rem 2.5rem 2rem 2.5rem;">
+        <header style="margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; width: 100%;">
+          <div>
+            <h1 style="font-size: 1.8rem; font-weight: 800; background: var(--accent-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-family: var(--font-family); margin: 0; letter-spacing: -0.5px;">Demanded Content Gaps</h1>
+            <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.25rem; font-family: var(--font-family);">Track requested courses and cloud topics that are currently missing from the platform catalog.</p>
+          </div>
+          <button id="btn-refresh-demand" class="btn-primary" style="padding: 0.5rem 1.2rem; font-size: 0.8rem; display: flex; align-items: center; gap: 0.4rem; border-radius: 20px; font-weight: 600; box-shadow: 0 4px 10px rgba(6, 182, 212, 0.2);">
+            🔄 Sync Demand
+          </button>
+        </header>
+
+        <!-- Analytics Overview cards -->
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1.5rem; flex-shrink: 0;">
+          <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 12px; padding: 1rem; display: flex; flex-direction: column; gap: 0.25rem;">
+            <span style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Total Requests</span>
+            <span id="demand-stat-requests" style="font-size: 1.8rem; font-weight: 800; color: var(--text-bright);">0</span>
+          </div>
+          <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 12px; padding: 1rem; display: flex; flex-direction: column; gap: 0.25rem;">
+            <span style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Unique Topics Demanded</span>
+            <span id="demand-stat-topics" style="font-size: 1.8rem; font-weight: 800; color: var(--accent-purple);">0</span>
+          </div>
+          <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 12px; padding: 1rem; display: flex; flex-direction: column; gap: 0.25rem;">
+            <span style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Top Demanded Area</span>
+            <span id="demand-stat-hottest" style="font-size: 1.25rem; font-weight: 800; color: var(--accent-cyan); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 0.4rem;">N/A</span>
+          </div>
+        </div>
+
+        <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 16px; padding: 1.5rem; display: flex; flex-direction: column; overflow: hidden; flex-grow: 1;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-shrink: 0;">
+            <h2 style="font-size: 1.05rem; font-weight: 700; color: var(--text-bright); display: flex; align-items: center; gap: 0.5rem;">
+              📋 Missing Course Backlog <span id="demand-list-badge" class="badge">0</span>
+            </h2>
+            <input type="text" id="demand-search" placeholder="Filter by topic..." style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 20px; color: var(--text-main); padding: 0.4rem 1rem; font-size: 0.8rem; outline: none; width: 220px; transition: var(--transition-smooth);">
+          </div>
+
+          <div id="demand-list" style="flex-grow: 1; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1rem; padding-right: 0.25rem;" class="custom-scrollbar">
+            <div class="text-muted" style="grid-column: 1/-1; text-align: center; margin-top: 5rem; font-size: 0.85rem;">No demanded content recorded yet.</div>
           </div>
         </div>
       </div>

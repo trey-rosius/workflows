@@ -2727,4 +2727,21 @@ body {
   }
 }
 
+/* Demand Workspace Styles */
+.demand-card {
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s ease, box-shadow 0.2s ease !important;
+}
+
+.demand-card:hover {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(168, 85, 247, 0.3) !important;
+  transform: translateY(-3px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4) !important;
+}
+
+#demand-search:focus {
+  border-color: rgba(168, 85, 247, 0.4) !important;
+  box-shadow: 0 0 10px rgba(168, 85, 247, 0.15) !important;
+}
+
 

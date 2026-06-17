@@ -182,69 +182,119 @@ function getAppSyncWebSocketUrl() {
 }
 
 function subscribeToChatbot(sessionId, onChunk, onComplete) {
-  const wsUrl = getAppSyncWebSocketUrl();
-  const ws = new WebSocket(wsUrl, ["graphql-ws"]);
-  
-  ws.onopen = () => {
-    ws.send(JSON.stringify({ type: "connection_init" }));
-  };
-  
-  ws.onmessage = (event) => {
-    const msg = JSON.parse(event.data);
-    
-    if (msg.type === "connection_ack") {
-      const subscriptionId = "sub-" + Math.random().toString(36).substr(2, 9);
-      
-      const query = `
-        subscription OnChatbotChunk($sessionId: String!) {
-          onChatbotChunk(sessionId: $sessionId) {
-            sessionId
-            chunk
-            isComplete
-          }
-        }
-      `;
-      
-      const host = new URL(ENV.GRAPHQL_API_ENDPOINT).host;
-      const authorization = {
-        host: host,
-        "x-api-key": ENV.API_KEY
-      };
-      
-      ws.send(JSON.stringify({
-        id: subscriptionId,
-        type: "start",
-        payload: {
-          data: JSON.stringify({
-            query: query,
-            variables: { sessionId: sessionId }
-          }),
-          extensions: {
-            authorization: authorization
-          }
-        }
-      }));
-    } else if (msg.type === "data") {
-      const chunkData = msg.payload.data?.onChatbotChunk;
-      if (chunkData) {
-        if (chunkData.isComplete) {
+  return new Promise((resolve) => {
+    const wsUrl = getAppSyncWebSocketUrl();
+    const ws = new WebSocket(wsUrl, ["graphql-ws"]);
+    let resolved = false;
+
+    // Reorder buffer — AppSync subscriptions can deliver mutation events out
+    // of order under rapid bursts. The Lambda tags every chunk with a
+    // monotonically increasing sequence so we can render strictly in order.
+    let nextSeq = 0;
+    let finalSeq = null;
+    let completed = false;
+    const pending = {};
+    const drain = () => {
+      while (pending[nextSeq] !== undefined) {
+        const { chunk, isComplete } = pending[nextSeq];
+        delete pending[nextSeq];
+        nextSeq++;
+        if (chunk) onChunk(chunk);
+        if (isComplete && !completed) {
+          completed = true;
           onComplete();
-          ws.close();
-        } else {
-          onChunk(chunkData.chunk);
+          try { ws.close(); } catch (e) {}
+          return;
         }
       }
-    } else if (msg.type === "error") {
-      console.error("AppSync Subscription error:", msg.payload);
-      ws.close();
-    }
-  };
-  
-  ws.onerror = (err) => {
-    console.error("WebSocket error:", err);
-  };
-  
-  return ws;
+      if (finalSeq !== null && nextSeq > finalSeq && !completed) {
+        completed = true;
+        onComplete();
+        try { ws.close(); } catch (e) {}
+      }
+    };
+
+    const timeout = setTimeout(() => {
+      if (!resolved) {
+        console.warn("WebSocket subscription handshake timed out. Proceeding without stream.");
+        resolved = true;
+        resolve(ws);
+      }
+    }, 2000);
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: "connection_init" }));
+    };
+
+    ws.onmessage = (event) => {
+      const msg = JSON.parse(event.data);
+
+      if (msg.type === "connection_ack") {
+        const subscriptionId = "sub-" + Math.random().toString(36).substr(2, 9);
+        const query = `
+          subscription OnChatbotChunk($sessionId: String!) {
+            onChatbotChunk(sessionId: $sessionId) {
+              sessionId
+              chunk
+              isComplete
+              sequence
+            }
+          }
+        `;
+        const host = new URL(ENV.GRAPHQL_API_ENDPOINT).host;
+        const authorization = {
+          host: host,
+          "x-api-key": ENV.API_KEY
+        };
+        ws.send(JSON.stringify({
+          id: subscriptionId,
+          type: "start",
+          payload: {
+            data: JSON.stringify({
+              query: query,
+              variables: { sessionId: sessionId }
+            }),
+            extensions: {
+              authorization: authorization
+            }
+          }
+        }));
+      } else if (msg.type === "start_ack") {
+        if (!resolved) {
+          clearTimeout(timeout);
+          resolved = true;
+          resolve(ws);
+        }
+      } else if (msg.type === "data") {
+        const chunkData = msg.payload.data?.onChatbotChunk;
+        if (chunkData && typeof chunkData.sequence === "number") {
+          pending[chunkData.sequence] = {
+            chunk: chunkData.chunk,
+            isComplete: chunkData.isComplete,
+          };
+          if (chunkData.isComplete) finalSeq = chunkData.sequence;
+          drain();
+        }
+      } else if (msg.type === "error") {
+        console.error("AppSync Subscription error:", msg.payload);
+        ws.close();
+        if (!resolved) {
+          clearTimeout(timeout);
+          resolved = true;
+          resolve(ws);
+        }
+      }
+    };
+
+    ws.onerror = (err) => {
+      console.error("WebSocket error:", err);
+      if (!resolved) {
+        clearTimeout(timeout);
+        resolved = true;
+        resolve(ws);
+      }
+    };
+  });
 }
 
 // Global click listener to intercept clicking on courses within the chat UI
@@ -2142,37 +2192,41 @@ async function sendChatbotMessage() {
   let subscription = null;
   let isStreamFinished = false;
 
-  subscription = subscribeToChatbot(chatSessionId, (chunk) => {
-    const typingIndicator = document.getElementById(typingId);
-    if (typingIndicator) typingIndicator.remove();
-    
-    let responseEl = document.getElementById(responseId);
-    if (!responseEl) {
-      chatbotMessages.innerHTML += `
-        <div class="chat-msg chat-msg-bot" id="${responseId}"></div>
-      `;
-      responseEl = document.getElementById(responseId);
-    }
-    
-    accumulatedText += chunk;
-    responseEl.innerHTML = parseMarkdown(accumulatedText);
-    chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
-  }, () => {
-    isStreamFinished = true;
-    const typingIndicator = document.getElementById(typingId);
-    if (typingIndicator) typingIndicator.remove();
-    
-    let responseEl = document.getElementById(responseId);
-    if (responseEl) {
-      wrapJargonInElement(responseEl);
-      if (window.hljs) {
-        responseEl.querySelectorAll('pre code').forEach((block) => {
-          window.hljs.highlightElement(block);
-        });
+  try {
+    subscription = await subscribeToChatbot(chatSessionId, (chunk) => {
+      const typingIndicator = document.getElementById(typingId);
+      if (typingIndicator) typingIndicator.remove();
+      
+      let responseEl = document.getElementById(responseId);
+      if (!responseEl) {
+        chatbotMessages.innerHTML += `
+          <div class="chat-msg chat-msg-bot" id="${responseId}"></div>
+        `;
+        responseEl = document.getElementById(responseId);
       }
-    }
-    chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
-  });
+      
+      accumulatedText += chunk;
+      responseEl.innerHTML = parseMarkdown(accumulatedText);
+      chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
+    }, () => {
+      isStreamFinished = true;
+      const typingIndicator = document.getElementById(typingId);
+      if (typingIndicator) typingIndicator.remove();
+      
+      let responseEl = document.getElementById(responseId);
+      if (responseEl) {
+        wrapJargonInElement(responseEl);
+        if (window.hljs) {
+          responseEl.querySelectorAll('pre code').forEach((block) => {
+            window.hljs.highlightElement(block);
+          });
+        }
+      }
+      chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
+    });
+  } catch (subErr) {
+    console.error("Failed to establish chatbot subscription:", subErr);
+  }
 
   try {
     const data = await queryGraphQL(`
@@ -2207,7 +2261,7 @@ async function sendChatbotMessage() {
       chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
     }
   } catch (err) {
-    if (subscription) {
+    if (subscription && typeof subscription.close === "function") {
       try { subscription.close(); } catch(e) {}
     }
     const typingIndicator = document.getElementById(typingId);
@@ -2546,11 +2600,13 @@ const sideNavChat = document.getElementById("side-nav-chat");
 const sideNavAnalyzer = document.getElementById("side-nav-analyzer");
 const sideNavLibrary = document.getElementById("side-nav-library");
 const sideNavTelemetry = document.getElementById("side-nav-telemetry");
+const sideNavDemand = document.getElementById("side-nav-demand");
 
 const chatWorkspaceContainer = document.getElementById("chat-workspace-container");
 const analyzerWorkspaceContainer = document.getElementById("analyzer-workspace-container");
 const coursesWorkspaceContainer = document.getElementById("courses-workspace-container");
 const telemetryWorkspaceContainer = document.getElementById("telemetry-workspace-container");
+const demandWorkspaceContainer = document.getElementById("demand-workspace-container");
 
 const analyzerSidebarContents = document.getElementById("analyzer-sidebar-contents");
 const coursesSidebarContents = document.getElementById("courses-sidebar-contents");
@@ -2580,16 +2636,20 @@ const telemetryCountBadge = document.getElementById("telemetry-count-badge");
 const evaluationsList = document.getElementById("evaluations-list");
 const evaluationsCountBadge = document.getElementById("evaluations-count-badge");
 
+const btnRefreshDemand = document.getElementById("btn-refresh-demand");
+const demandList = document.getElementById("demand-list");
+const demandSearch = document.getElementById("demand-search");
+
 function clearActiveSideNav() {
   [
-    sideNavChat, sideNavAnalyzer, sideNavLibrary, sideNavTelemetry
+    sideNavChat, sideNavAnalyzer, sideNavLibrary, sideNavTelemetry, sideNavDemand
   ].forEach(btn => {
     if (btn) btn.classList.remove("active");
   });
 }
 
 function hideAllWorkspaceContainers() {
-  [chatWorkspaceContainer, analyzerWorkspaceContainer, coursesWorkspaceContainer, telemetryWorkspaceContainer].forEach(container => {
+  [chatWorkspaceContainer, analyzerWorkspaceContainer, coursesWorkspaceContainer, telemetryWorkspaceContainer, demandWorkspaceContainer].forEach(container => {
     if (container) container.classList.add("hidden");
   });
 }
@@ -2662,6 +2722,21 @@ window.switchToTelemetry = function() {
   loadTelemetryLogs();
 };
 
+window.switchToDemand = function() {
+  if (window.innerWidth <= 768 && typeof window.closeMobileSidebar === "function") {
+    window.closeMobileSidebar();
+  }
+  clearActiveSideNav();
+  if (sideNavDemand) sideNavDemand.classList.add("active");
+  hideAllWorkspaceContainers();
+  if (demandWorkspaceContainer) demandWorkspaceContainer.classList.remove("hidden");
+  
+  if (analyzerSidebarContents) analyzerSidebarContents.classList.remove("hidden");
+  if (coursesSidebarContents) coursesSidebarContents.classList.add("hidden");
+  
+  loadDemandLogs();
+};
+
 // Sidebar Collapse Handler
 if (btnCollapseSidebar && sidebarEl) {
   btnCollapseSidebar.addEventListener("click", () => {
@@ -2705,37 +2780,41 @@ async function sendMainChatMsg() {
   let subscription = null;
   let isStreamFinished = false;
 
-  subscription = subscribeToChatbot(chatSessionId, (chunk) => {
-    const typingIndicator = document.getElementById(typingId);
-    if (typingIndicator) typingIndicator.remove();
-    
-    let responseEl = document.getElementById(responseId);
-    if (!responseEl) {
-      mainChatStream.innerHTML += `
-        <div class="chat-msg-bot markdown-body" id="${responseId}" style="margin-bottom: 0.5rem;"></div>
-      `;
-      responseEl = document.getElementById(responseId);
-    }
-    
-    accumulatedText += chunk;
-    responseEl.innerHTML = parseMarkdown(accumulatedText);
-    mainChatStream.scrollTop = mainChatStream.scrollHeight;
-  }, () => {
-    isStreamFinished = true;
-    const typingIndicator = document.getElementById(typingId);
-    if (typingIndicator) typingIndicator.remove();
-    
-    let responseEl = document.getElementById(responseId);
-    if (responseEl) {
-      wrapJargonInElement(responseEl);
-      if (window.hljs) {
-        responseEl.querySelectorAll('pre code').forEach((block) => {
-          window.hljs.highlightElement(block);
-        });
+  try {
+    subscription = await subscribeToChatbot(chatSessionId, (chunk) => {
+      const typingIndicator = document.getElementById(typingId);
+      if (typingIndicator) typingIndicator.remove();
+      
+      let responseEl = document.getElementById(responseId);
+      if (!responseEl) {
+        mainChatStream.innerHTML += `
+          <div class="chat-msg-bot markdown-body" id="${responseId}" style="margin-bottom: 0.5rem;"></div>
+        `;
+        responseEl = document.getElementById(responseId);
       }
-    }
-    mainChatStream.scrollTop = mainChatStream.scrollHeight;
-  });
+      
+      accumulatedText += chunk;
+      responseEl.innerHTML = parseMarkdown(accumulatedText);
+      mainChatStream.scrollTop = mainChatStream.scrollHeight;
+    }, () => {
+      isStreamFinished = true;
+      const typingIndicator = document.getElementById(typingId);
+      if (typingIndicator) typingIndicator.remove();
+      
+      let responseEl = document.getElementById(responseId);
+      if (responseEl) {
+        wrapJargonInElement(responseEl);
+        if (window.hljs) {
+          responseEl.querySelectorAll('pre code').forEach((block) => {
+            window.hljs.highlightElement(block);
+          });
+        }
+      }
+      mainChatStream.scrollTop = mainChatStream.scrollHeight;
+    });
+  } catch (subErr) {
+    console.error("Failed to establish main chatbot subscription:", subErr);
+  }
 
   try {
     const variables = {
@@ -2775,7 +2854,7 @@ async function sendMainChatMsg() {
       mainChatStream.scrollTop = mainChatStream.scrollHeight;
     }
   } catch (err) {
-    if (subscription) {
+    if (subscription && typeof subscription.close === "function") {
       try { subscription.close(); } catch(e) {}
     }
     const typingIndicator = document.getElementById(typingId);
@@ -2919,14 +2998,108 @@ async function loadTelemetryLogs() {
   }
 }
 
+// Fetch and Render Demand Telemetry
+let allDemandLogs = [];
+
+async function loadDemandLogs() {
+  if (!demandList) return;
+
+  demandList.innerHTML = `<div class="loading-spinner-small" style="grid-column: 1/-1;">Loading demand logs...</div>`;
+
+  try {
+    const data = await queryGraphQL(`
+      query GetContentDemandTelemetry {
+        getContentDemandTelemetry {
+          requestId
+          prompt
+          timestamp
+          detectedTopic
+        }
+      }
+    `);
+    allDemandLogs = data.getContentDemandTelemetry || [];
+    renderDemandLogs();
+  } catch (err) {
+    demandList.innerHTML = `<div class="chat-msg-error" style="grid-column: 1/-1;">Failed to load demand logs: ${err.message}</div>`;
+  }
+}
+
+function renderDemandLogs() {
+  if (!demandList) return;
+  const searchVal = document.getElementById("demand-search")?.value.trim().toLowerCase() || "";
+  const filtered = allDemandLogs.filter(item => {
+    if (!searchVal) return true;
+    const topic = (item.detectedTopic || "").toLowerCase();
+    const prompt = (item.prompt || "").toLowerCase();
+    return topic.includes(searchVal) || prompt.includes(searchVal);
+  });
+
+  // Calculate stats
+  const totalRequests = allDemandLogs.length;
+  const uniqueTopics = new Set(allDemandLogs.map(item => item.detectedTopic || 'Unknown'));
+  
+  // Hottest topic calculation
+  const topicCounts = {};
+  allDemandLogs.forEach(item => {
+    const t = item.detectedTopic || 'Unknown';
+    topicCounts[t] = (topicCounts[t] || 0) + 1;
+  });
+  let hottestTopic = 'N/A';
+  let maxCount = 0;
+  for (const [t, count] of Object.entries(topicCounts)) {
+    if (count > maxCount) {
+      maxCount = count;
+      hottestTopic = t;
+    }
+  }
+
+  // Update DOM stats
+  const statRequests = document.getElementById("demand-stat-requests");
+  const statTopics = document.getElementById("demand-stat-topics");
+  const statHottest = document.getElementById("demand-stat-hottest");
+  const listBadge = document.getElementById("demand-list-badge");
+
+  if (statRequests) statRequests.textContent = totalRequests;
+  if (statTopics) statTopics.textContent = uniqueTopics.size;
+  if (statHottest) statHottest.textContent = hottestTopic + (maxCount > 0 ? ` (${maxCount} reqs)` : '');
+  if (listBadge) listBadge.textContent = filtered.length;
+
+  if (filtered.length === 0) {
+    demandList.innerHTML = `<div class="text-muted" style="grid-column: 1/-1; text-align: center; margin-top: 5rem; font-size: 0.85rem;">No demanded content items match your search.</div>`;
+    return;
+  }
+
+  demandList.innerHTML = filtered.map(item => {
+    const dateStr = new Date(parseFloat(item.timestamp) * 1000).toLocaleString();
+    return `
+      <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column; gap: 0.75rem; transition: var(--transition-smooth); position: relative; overflow: hidden;" class="demand-card">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 0.75rem; background: rgba(147, 51, 234, 0.15); color: #c084fc; padding: 0.2rem 0.6rem; border-radius: 10px; font-weight: 600;">${item.detectedTopic || 'Unknown'}</span>
+          <span style="font-size: 0.7rem; color: var(--text-muted);">${dateStr}</span>
+        </div>
+        <p style="font-size: 0.85rem; font-weight: 500; color: var(--text-bright); margin: 0; line-height: 1.45;">"${item.prompt}"</p>
+        <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 0.75rem; margin-top: 0.25rem;">
+          <span style="font-size: 0.65rem; color: var(--text-muted); font-family: monospace;">Ref: ${item.requestId.substring(0, 18)}...</span>
+          <span style="font-size: 0.65rem; background: rgba(245, 158, 11, 0.1); color: #f59e0b; padding: 0.15rem 0.4rem; border-radius: 4px; font-weight: 600;">⚠️ Content Gap</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
 // Bind event listeners
 if (sideNavChat) sideNavChat.addEventListener("click", switchToChat);
 if (sideNavAnalyzer) sideNavAnalyzer.addEventListener("click", () => switchToAnalyzer(true));
 if (sideNavLibrary) sideNavLibrary.addEventListener("click", switchToLibrary);
 if (sideNavTelemetry) sideNavTelemetry.addEventListener("click", switchToTelemetry);
+if (sideNavDemand) sideNavDemand.addEventListener("click", switchToDemand);
 
 if (sideBtnNewChat) sideBtnNewChat.addEventListener("click", resetTutorChat);
 if (btnRefreshTelemetry) btnRefreshTelemetry.addEventListener("click", loadTelemetryLogs);
+if (btnRefreshDemand) btnRefreshDemand.addEventListener("click", loadDemandLogs);
+if (demandSearch) {
+  demandSearch.addEventListener("input", renderDemandLogs);
+}
 
 if (cardVideoAi) cardVideoAi.addEventListener("click", switchToAnalyzer);
 if (cardLibrary) cardLibrary.addEventListener("click", switchToLibrary);
