@@ -1,0 +1,47 @@
+/* ============================================================
+   Educloud Academy — Radii, shadows, motion, blur
+   Soft, friendly. Low-opacity layered shadows, slight cool cast.
+   ============================================================ */
+
+:root {
+  /* Corner radii — generous & rounded */
+  --radius-xs:   6px;
+  --radius-sm:   10px;
+  --radius-md:   14px;   /* default control */
+  --radius-lg:   18px;   /* cards */
+  --radius-xl:   24px;   /* large surfaces / modals */
+  --radius-2xl:  32px;
+  --radius-pill: 999px;
+
+  /* Shadows — soft, layered, subtle */
+  --shadow-xs: 0 1px 2px rgba(20, 28, 24, 0.06);
+  --shadow-sm: 0 1px 3px rgba(20, 28, 24, 0.07), 0 1px 2px rgba(20, 28, 24, 0.04);
+  --shadow-md: 0 4px 12px rgba(20, 28, 24, 0.08), 0 2px 4px rgba(20, 28, 24, 0.04);
+  --shadow-lg: 0 12px 28px rgba(20, 28, 24, 0.10), 0 4px 10px rgba(20, 28, 24, 0.05);
+  --shadow-xl: 0 24px 56px rgba(20, 28, 24, 0.14), 0 8px 20px rgba(20, 28, 24, 0.06);
+
+  /* Brand-tinted glow (CTAs, AI surfaces) */
+  --shadow-brand: 0 6px 20px color-mix(in srgb, var(--pink-500) 28%, transparent);
+  --shadow-ai:    0 6px 20px color-mix(in srgb, var(--orange-500) 26%, transparent);
+
+  /* Glassmorphism shadows + blur */
+  --glass-shadow:    0 8px 32px rgba(40, 20, 30, 0.12), inset 0 1px 0 rgba(255,255,255,0.5);
+  --glass-shadow-lg: 0 20px 48px rgba(40, 20, 30, 0.16), inset 0 1px 0 rgba(255,255,255,0.5);
+  --glass-blur:    18px;
+
+  /* Focus ring */
+  --focus-ring: 0 0 0 3px var(--ring-focus);
+
+  /* Blur (glass surfaces, sticky bars) */
+  --blur-sm: 8px;
+  --blur-md: 16px;
+  --blur-lg: 28px;
+
+  /* Motion */
+  --ease-out:   cubic-bezier(0.22, 1, 0.36, 1);   /* @kind other */
+  --ease-inout: cubic-bezier(0.65, 0, 0.35, 1);   /* @kind other */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1); /* @kind other */
+  --dur-fast:   120ms;  /* @kind other */
+  --dur-base:   200ms;  /* @kind other */
+  --dur-slow:   320ms;  /* @kind other */
+}

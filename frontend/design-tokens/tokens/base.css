@@ -1,0 +1,70 @@
+/* ============================================================
+   Educloud Academy — Base / reset
+   Warm canvas with a soft pink/orange gradient mesh so glass surfaces
+   have something to refract. Cards stay white for legibility.
+   ============================================================ */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--text-body);
+  background-color: var(--cream);
+  background-image:
+    radial-gradient(720px circle at 8% -4%, rgba(233, 62, 144, 0.12), transparent 55%),
+    radial-gradient(680px circle at 102% 6%, rgba(251, 143, 63, 0.13), transparent 52%),
+    radial-gradient(900px circle at 60% 108%, rgba(242, 100, 118, 0.08), transparent 55%);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4, h5 {
+  font-family: var(--font-display);
+  color: var(--text-strong);
+  line-height: var(--lh-heading);
+  letter-spacing: var(--ls-snug);
+  margin: 0;
+  font-weight: var(--fw-bold);
+}
+
+p { margin: 0; }
+
+a { color: var(--text-link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+code, kbd, samp, pre { font-family: var(--font-mono); }
+
+::selection { background: color-mix(in srgb, var(--pink-500) 22%, transparent); }
+
+/* Eyebrow / overline label */
+.eyebrow {
+  font-family: var(--font-sans);
+  font-size: var(--fs-micro);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--ls-caps);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* Glass surface utility */
+.glass {
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+/* Gradient text (brand wordmark, hero accents) */
+.brand-gradient-text {
+  background: var(--gradient-brand);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}

@@ -1,0 +1,118 @@
+/* ============================================================
+   Educloud Academy — Color tokens
+   Brand gradient: pink (#EC4997) → coral (#F26476) → orange (#FB8F3F)
+   Primary action = PINK · AI Tutor accent = ORANGE · warm neutrals.
+   ============================================================ */
+
+:root {
+  /* ---- Brand: Pink/Magenta (primary action) ---- */
+  --pink-50:  #FDEAF3;
+  --pink-100: #FBD0E3;
+  --pink-200: #F7A6C8;
+  --pink-300: #F27CAE;
+  --pink-400: #EE5296;
+  --pink-500: #E92E7B;  /* core brand */
+  --pink-600: #CF1F69;
+  --pink-700: #AA1856;
+  --pink-800: #851444;
+  --pink-900: #671036;
+
+  /* ---- AI Tutor / secondary: Orange ---- */
+  --orange-50:  #FFF2E7;
+  --orange-100: #FFE0C6;
+  --orange-200: #FEC392;
+  --orange-300: #FCA459;
+  --orange-400: #FB8F3F;  /* logo orange */
+  --orange-500: #F77A1E;  /* core */
+  --orange-600: #E0640A;
+  --orange-700: #B44F08;
+  --orange-800: #8B3F0B;
+  --orange-900: #6D330C;
+
+  /* ---- Coral: gradient bridge / highlights ---- */
+  --coral-300: #F9A28E;
+  --coral-400: #F58172;
+  --coral-500: #F26476;
+  --coral-600: #DC4860;
+
+  /* ---- Amber: achievements, ratings, certificates ---- */
+  --amber-300: #FFD98A;
+  --amber-400: #FBC04E;
+  --amber-500: #F5A623;
+  --amber-600: #D6850A;
+
+  /* ---- Neutrals: warm-grey ramp (ink → cream) ---- */
+  --ink-950: #1A1410;
+  --ink-900: #221C17;
+  --ink-800: #312A24;
+  --ink-700: #473F38;
+  --ink-600: #5F564E;
+  --ink-500: #80766C;
+  --ink-400: #A69C92;
+  --ink-300: #C9C1B8;
+  --ink-200: #E3DDD5;
+  --ink-150: #ECE7E0;
+  --ink-100: #F3EFEA;
+  --ink-50:  #F9F6F2;
+  --cream:   #FBF8F4;   /* app background base */
+  --white:   #FFFFFF;
+
+  /* ---- Brand gradient (hero, AI, CTAs) ---- */
+  --gradient-brand:      linear-gradient(118deg, #E93E90 0%, #F15E73 48%, #FB8F3F 100%);  /* @kind color */
+  --gradient-brand-rev:  linear-gradient(118deg, #FB8F3F 0%, #F15E73 52%, #E93E90 100%);  /* @kind color */
+  --gradient-brand-soft: linear-gradient(118deg, #FDEAF3 0%, #FFF2E7 100%);  /* @kind color */
+
+  /* ---- Semantic status ---- */
+  --success: #12A150;
+  --warning: #F5A623;
+  --danger:  #E5484D;
+  --info:    #3B82F6;
+  --success-soft: #E4F6EC;
+  --warning-soft: #FEF3DA;
+  --danger-soft:  #FCE9EA;
+  --info-soft:    #E8F0FE;
+
+  /* ============================================================
+     SEMANTIC ALIASES  (use these in components, not raw scale)
+     ============================================================ */
+
+  /* Surfaces */
+  --bg-app:         var(--cream);
+  --surface-card:   var(--white);
+  --surface-sunken: var(--ink-50);
+  --surface-raised: var(--white);
+  --surface-inverse: var(--ink-900);
+  --surface-pink-soft:   var(--pink-50);
+  --surface-orange-soft: var(--orange-50);
+
+  /* Text */
+  --text-strong:  var(--ink-900);
+  --text-body:    var(--ink-700);
+  --text-muted:   var(--ink-500);
+  --text-faint:   var(--ink-400);
+  --text-on-brand:var(--white);
+  --text-on-dark: #F3ECE6;
+  --text-link:    var(--pink-600);
+
+  /* Brand action */
+  --brand:          var(--pink-500);
+  --brand-hover:    var(--pink-600);
+  --brand-press:    var(--pink-700);
+  --brand-contrast: var(--white);
+  --ai:             var(--orange-500);
+  --ai-hover:       var(--orange-600);
+
+  /* Borders & lines */
+  --border-subtle: var(--ink-150);
+  --border-default:var(--ink-200);
+  --border-strong: var(--ink-300);
+  --border-focus:  var(--pink-500);
+  --ring-focus:    color-mix(in srgb, var(--pink-500) 30%, transparent);
+
+  /* ---- Glassmorphism ---- */
+  --glass-bg:        rgba(255, 255, 255, 0.55);
+  --glass-bg-strong: rgba(255, 255, 255, 0.74);
+  --glass-bg-dark:   rgba(34, 28, 23, 0.55);
+  --glass-border:    rgba(255, 255, 255, 0.6);
+  --glass-border-dark: rgba(255, 255, 255, 0.12);
+}

@@ -327,6 +327,8 @@ function renderDiagramFindings(rootEl) {
     container.replaceWith(review);
 
     let activeFindingId = null;
+    let activeBbox = null;
+    let activeColor = null;
 
     function resetZoom() {
       const cw = wrap.clientWidth;
@@ -391,9 +393,11 @@ function renderDiagramFindings(rootEl) {
 
     img.addEventListener('load', () => {
       resetZoom();
-      // Run again on resize so the diagram stays fit-to-container.
+      // Keep the layout sane across viewport changes (e.g. mobile↔desktop
+      // when the side-by-side breakpoint kicks in).
       const ro = new ResizeObserver(() => {
         if (activeFindingId === null) resetZoom();
+        else if (activeBbox) zoomTo(activeBbox, activeColor);
       });
       ro.observe(wrap);
     });
@@ -401,39 +405,85 @@ function renderDiagramFindings(rootEl) {
 
     fullBtn.addEventListener('click', () => {
       activeFindingId = null;
+      activeBbox = null;
+      activeColor = null;
       list.querySelectorAll('.diag-finding-card').forEach((el) => {
         el.classList.remove('diag-finding-card-active');
       });
       resetZoom();
     });
 
+    const severityLabel = (s) => (
+      s === 'working' ? 'Working' :
+      s === 'suggestion' ? 'Suggestion' :
+      'Issue'
+    );
+    const severityIcon = (s) => (
+      s === 'working' ? '✓' :
+      s === 'suggestion' ? '💡' :
+      '⚠'
+    );
+
     findings.forEach((f, idx) => {
       const num = idx + 1;
       const color = severityColor(f.severity);
-      const card = document.createElement('button');
-      card.type = 'button';
+      const hasBbox = Array.isArray(f.bbox) && f.bbox.length === 4;
+      const card = document.createElement(hasBbox ? 'button' : 'div');
+      if (hasBbox) card.type = 'button';
       card.className = `diag-finding-card diag-finding-${f.severity || 'issue'}`;
+      if (!hasBbox) card.classList.add('diag-finding-card-static');
       card.innerHTML = `
-        <span class="diag-finding-num"></span>
-        <div class="diag-finding-body">
-          <div class="diag-finding-title"></div>
-          <div class="diag-finding-detail"></div>
+        <div class="diag-finding-header">
+          <span class="diag-finding-num"></span>
+          <div class="diag-finding-titleblock">
+            <span class="diag-finding-badge"></span>
+            <span class="diag-finding-title"></span>
+          </div>
+        </div>
+        <div class="diag-finding-detail"></div>
+        <div class="diag-finding-callout diag-finding-why" style="display: none;">
+          <span class="diag-finding-callout-label">Why it matters</span>
+          <span class="diag-finding-callout-text"></span>
+        </div>
+        <div class="diag-finding-callout diag-finding-fix" style="display: none;">
+          <span class="diag-finding-callout-label">Fix</span>
+          <span class="diag-finding-callout-text"></span>
         </div>
       `;
-      card.querySelector('.diag-finding-num').textContent = String(num);
-      card.querySelector('.diag-finding-num').style.background = color;
+      const numEl = card.querySelector('.diag-finding-num');
+      numEl.textContent = String(num);
+      numEl.style.background = color;
+      const badgeEl = card.querySelector('.diag-finding-badge');
+      badgeEl.textContent = `${severityIcon(f.severity)} ${severityLabel(f.severity)}`;
+      badgeEl.style.color = color;
+      badgeEl.style.borderColor = color;
       const titleText = (f.service ? `${f.service} — ` : '') + (f.title || '');
       card.querySelector('.diag-finding-title').textContent = titleText;
       card.querySelector('.diag-finding-detail').textContent = f.detail || '';
 
-      card.addEventListener('click', () => {
-        activeFindingId = f.id || `idx-${idx}`;
-        list.querySelectorAll('.diag-finding-card').forEach((el) => {
-          el.classList.remove('diag-finding-card-active');
+      if (f.whyItMatters) {
+        const why = card.querySelector('.diag-finding-why');
+        why.style.display = '';
+        why.querySelector('.diag-finding-callout-text').textContent = f.whyItMatters;
+      }
+      if (f.fix) {
+        const fix = card.querySelector('.diag-finding-fix');
+        fix.style.display = '';
+        fix.querySelector('.diag-finding-callout-text').textContent = f.fix;
+      }
+
+      if (hasBbox) {
+        card.addEventListener('click', () => {
+          activeFindingId = f.id || `idx-${idx}`;
+          activeBbox = f.bbox;
+          activeColor = color;
+          list.querySelectorAll('.diag-finding-card').forEach((el) => {
+            el.classList.remove('diag-finding-card-active');
+          });
+          card.classList.add('diag-finding-card-active');
+          zoomTo(activeBbox, color);
         });
-        card.classList.add('diag-finding-card-active');
-        zoomTo(f.bbox || [0, 0, 0.1, 0.1], color);
-      });
+      }
       list.appendChild(card);
     });
   });

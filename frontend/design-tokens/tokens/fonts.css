@@ -1,0 +1,7 @@
+/* Educloud Academy — Webfonts
+   Brand typeface: Google Sans Flex (variable, OFL — Google's brand font, on Google Fonts since 2025).
+   Numerals / code: JetBrains Mono.
+   If you self-host, vendor the .woff2 and swap these @imports for local @font-face rules. */
+
+@import url('https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wght@6..144,300..800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');

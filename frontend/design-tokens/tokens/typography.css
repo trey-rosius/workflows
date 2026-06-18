@@ -1,0 +1,51 @@
+/* ============================================================
+   Educloud Academy — Typography tokens
+   Brand typeface: Google Sans Flex (variable) · Numerals: JetBrains Mono
+   ============================================================ */
+
+:root {
+  /* Families */
+  --font-display: 'Google Sans Flex', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-sans:    'Google Sans Flex', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono:    'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  /* Weights */
+  --fw-regular:  400;  /* @kind font */
+  --fw-medium:   500;  /* @kind font */
+  --fw-semibold: 600;  /* @kind font */
+  --fw-bold:     700;  /* @kind font */
+  --fw-extra:    800;  /* @kind font */
+
+  /* Type scale (px → rem at 16px base). For fluid hero type, wrap in clamp() at call site. */
+  --fs-display-xl: 4.25rem;   /* @kind font */ /* 68 — hero */
+  --fs-display-lg: 3.25rem;   /* @kind font */ /* 52 */
+  --fs-display:    2.25rem;   /* @kind font */ /* 36 */
+  --fs-h1:         1.75rem;   /* 28 */
+  --fs-h2:         1.4375rem; /* 23 */
+  --fs-h3:         1.1875rem; /* 19 */
+  --fs-h4:         1.0625rem; /* 17 */
+  --fs-body-lg:    1.0625rem; /* 17 */
+  --fs-body:       0.9375rem; /* 15 */
+  --fs-body-sm:    0.875rem;  /* 14 */
+  --fs-caption:    0.8125rem; /* 13 */
+  --fs-micro:      0.6875rem; /* 11 — labels/overline */
+
+  /* Line heights */
+  --lh-tight:   1.08;  /* @kind font */
+  --lh-snug:    1.2;   /* @kind font */
+  --lh-heading: 1.22;  /* @kind font */
+  --lh-body:    1.55;  /* @kind font */
+  --lh-relaxed: 1.7;   /* @kind font */
+
+  /* Letter spacing — Google Sans Flex is geometric; keep display tracking tight */
+  --ls-tight:   -0.025em;  /* @kind font */
+  --ls-snug:    -0.012em;  /* @kind font */
+  --ls-normal:  0em;       /* @kind font */
+  --ls-wide:    0.03em;    /* @kind font */
+  --ls-caps:    0.09em;    /* @kind font */ /* overlines / eyebrows */
+
+  /* ---- Semantic text roles ---- */
+  --text-display-font: var(--font-display);
+  --text-heading-font: var(--font-display);
+  --text-body-font:    var(--font-sans);
+}
