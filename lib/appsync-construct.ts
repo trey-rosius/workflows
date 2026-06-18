@@ -549,6 +549,9 @@ export class AppSyncConstruct extends Construct {
         TUTOR_GUARDRAIL_VERSION: tutorGuardrailVersion.attrVersion,
         APPSYNC_ENDPOINT: this.api.graphqlUrl,
         APPSYNC_API_KEY: this.api.apiKey || "",
+        // Media bucket — used by the architecture-review intent to fetch
+        // student-uploaded diagrams (PNG/JPG) under `diagrams/`.
+        MEDIA_BUCKET_NAME: this.mediaBucket.bucketName,
       },
     });
 
@@ -557,6 +560,7 @@ export class AppSyncConstruct extends Construct {
     contentDemandTelemetryTable.grantReadWriteData(askChatbotFunction);
     chatEvaluationsTable.grantReadData(askChatbotFunction);
     promptAuditTable.grantWriteData(askChatbotFunction);
+    this.mediaBucket.grantRead(askChatbotFunction);
 
     askChatbotFunction.addToRolePolicy(
       new iam.PolicyStatement({
@@ -968,6 +972,13 @@ export class AppSyncConstruct extends Construct {
     getUploadUrlDs.createResolver("getUploadUrlResolver", {
       typeName: "Mutation",
       fieldName: "getUploadUrl",
+      code: appsync.Code.fromAsset(path.join(__dirname, "../resolvers/invoke/invoke.js")),
+      runtime: appsync.FunctionRuntime.JS_1_0_0,
+    });
+
+    getUploadUrlDs.createResolver("getDiagramUploadUrlResolver", {
+      typeName: "Mutation",
+      fieldName: "getDiagramUploadUrl",
       code: appsync.Code.fromAsset(path.join(__dirname, "../resolvers/invoke/invoke.js")),
       runtime: appsync.FunctionRuntime.JS_1_0_0,
     });

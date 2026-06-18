@@ -2744,4 +2744,382 @@ body {
   box-shadow: 0 0 10px rgba(168, 85, 247, 0.15) !important;
 }
 
+/* A2UI choice surface — rendered in place of lettered options markdown */
+.a2ui-surface {
+  margin: 0.75rem 0;
+}
+
+.a2ui-choice-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.a2ui-choice-btn {
+  display: block;
+  width: 100%;
+  padding: 0.65rem 0.9rem;
+  background: rgba(168, 85, 247, 0.08);
+  border: 1px solid rgba(168, 85, 247, 0.35);
+  color: inherit;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.9rem;
+  text-align: left;
+  line-height: 1.4;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.05s ease;
+}
+
+.a2ui-choice-btn:hover:not(:disabled) {
+  background: rgba(168, 85, 247, 0.18);
+  border-color: rgba(168, 85, 247, 0.7);
+}
+
+.a2ui-choice-btn:active:not(:disabled) {
+  transform: scale(0.99);
+}
+
+.a2ui-choice-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.a2ui-choice-btn-selected {
+  background: rgba(168, 85, 247, 0.3) !important;
+  border-color: rgba(168, 85, 247, 0.9) !important;
+  opacity: 1 !important;
+  font-weight: 600;
+}
+
+/* Course cards — rendered in place of platform course links inside study
+   plans and any chat reply that bullet-points platform courses. */
+.a2ui-course-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+  margin: 0.75rem 0;
+  padding: 0;
+  list-style: none;
+}
+
+.a2ui-course-card {
+  display: flex;
+  flex-direction: column;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(168, 85, 247, 0.25);
+  border-radius: 0.6rem;
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  outline: none;
+  text-decoration: none;
+  color: inherit;
+}
+
+.a2ui-course-card:hover,
+.a2ui-course-card:focus-visible {
+  border-color: rgba(168, 85, 247, 0.65);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
+}
+
+.a2ui-course-card-image {
+  height: 120px;
+  background-size: cover;
+  background-position: center;
+  background-color: rgba(168, 85, 247, 0.1);
+}
+
+.a2ui-course-card-image-placeholder {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(59, 130, 246, 0.15));
+}
+
+.a2ui-course-card-body {
+  padding: 0.75rem 0.85rem 0.5rem;
+  flex: 1;
+  min-height: 0;
+}
+
+.a2ui-course-card-title {
+  margin: 0 0 0.35rem 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text-bright, #fff);
+}
+
+.a2ui-course-card-desc {
+  margin: 0 0 0.4rem 0;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: var(--text-muted, #a0a0a0);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.a2ui-course-card-rationale {
+  margin: 0;
+  padding-top: 0.4rem;
+  border-top: 1px dashed rgba(168, 85, 247, 0.25);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: var(--text-main, #cbd5e1);
+  font-style: italic;
+}
+
+.a2ui-course-card-footer {
+  padding: 0.5rem 0.85rem 0.85rem;
+}
+
+.a2ui-course-card-cta {
+  display: block;
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  background: rgba(168, 85, 247, 0.2);
+  border: 1px solid rgba(168, 85, 247, 0.4);
+  border-radius: 0.4rem;
+  color: var(--text-bright, #fff);
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.a2ui-course-card-cta:hover {
+  background: rgba(168, 85, 247, 0.35);
+  border-color: rgba(168, 85, 247, 0.6);
+}
+
+/* Diagram attachment chip — appears above the chat input while a diagram
+   is pending upload + review submission. */
+.diagram-attachment-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.5rem 0.65rem;
+  background: rgba(168, 85, 247, 0.08);
+  border: 1px solid rgba(168, 85, 247, 0.35);
+  border-radius: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-bright, #fff);
+}
+
+.diagram-attachment-chip-thumb {
+  width: 36px;
+  height: 36px;
+  object-fit: cover;
+  border-radius: 0.3rem;
+  background: rgba(255, 255, 255, 0.05);
+  flex-shrink: 0;
+}
+
+.diagram-attachment-chip-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.diagram-attachment-chip-label {
+  font-weight: 600;
+  font-size: 0.78rem;
+}
+
+.diagram-attachment-chip-filename {
+  font-size: 0.7rem;
+  color: var(--text-muted, #a0a0a0);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diagram-attachment-chip-remove {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--text-muted, #a0a0a0);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.diagram-attachment-chip-remove:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+/* User message bubble: when a diagram is attached, show it above any text. */
+.chat-msg-user-diagram {
+  display: block;
+  max-width: 100%;
+  max-height: 280px;
+  border-radius: 0.5rem;
+  margin-bottom: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.chat-msg-user-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Architecture-review click-to-focus panel ------------------------------- */
+.diag-review {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin: 0.85rem 0;
+  padding: 0.7rem;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(168, 85, 247, 0.2);
+  border-radius: 0.6rem;
+}
+
+.diag-canvas-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.diag-canvas-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted, #a0a0a0);
+}
+
+.diag-show-full-btn {
+  padding: 0.3rem 0.6rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text-bright, #fff);
+  border-radius: 0.35rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.diag-show-full-btn:hover {
+  background: rgba(168, 85, 247, 0.18);
+  border-color: rgba(168, 85, 247, 0.5);
+}
+
+.diag-canvas-wrap {
+  position: relative;
+  width: 100%;
+  height: 380px;
+  overflow: hidden;
+  background: #0c0a12;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 0.45rem;
+}
+
+.diag-canvas-img {
+  position: absolute;
+  left: 0;
+  top: 0;
+  user-select: none;
+  pointer-events: none;
+  transition: left 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+              top 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+              width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+              height 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.diag-canvas-highlight {
+  position: absolute;
+  display: none;
+  border: 2px solid #ef4444;
+  border-radius: 0.3rem;
+  pointer-events: none;
+  /* The box-shadow trick dims everything outside the highlight without
+     needing a separate overlay element. */
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
+  transition: left 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+              top 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+              width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+              height 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.diag-findings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.diag-finding-card {
+  display: flex;
+  gap: 0.65rem;
+  padding: 0.55rem 0.7rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-left-width: 3px;
+  border-radius: 0.4rem;
+  font-size: 0.85rem;
+  align-items: flex-start;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font-family: inherit;
+  transition: background 0.12s ease, transform 0.05s ease;
+}
+
+.diag-finding-card:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.diag-finding-card-active {
+  background: rgba(168, 85, 247, 0.12) !important;
+  outline: 1px solid rgba(168, 85, 247, 0.5);
+}
+
+.diag-finding-issue { border-left-color: #ef4444; }
+.diag-finding-working { border-left-color: #22c55e; }
+.diag-finding-suggestion { border-left-color: #3b82f6; }
+
+.diag-finding-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.72rem;
+  flex-shrink: 0;
+  margin-top: 0.05rem;
+}
+
+.diag-finding-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.diag-finding-title {
+  font-weight: 600;
+  color: var(--text-bright, #fff);
+  margin-bottom: 0.2rem;
+  line-height: 1.3;
+}
+
+.diag-finding-detail {
+  color: var(--text-muted, #a0a0a0);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+
 

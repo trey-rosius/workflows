@@ -82,6 +82,7 @@ type Mutation {
   ): Boolean! @aws_api_key @aws_cognito_user_pools
 
   getUploadUrl(fileName: String!, contentType: String!): UploadUrl! @aws_api_key @aws_cognito_user_pools
+  getDiagramUploadUrl(fileName: String!, contentType: String!): UploadUrl! @aws_api_key @aws_cognito_user_pools
 
   initiateMultipartUpload(fileName: String!, contentType: String!): InitiateMultipartResult! @aws_api_key @aws_cognito_user_pools
 
@@ -143,7 +144,7 @@ type Query {
   listVideoAssets: [VideoAssets] @aws_api_key @aws_cognito_user_pools
   listCourses: [CourseAssets] @aws_api_key @aws_cognito_user_pools
   getCourse(courseId: String!): CourseAssets @aws_api_key @aws_cognito_user_pools
-  askCourseChatbot(courseId: String, message: String!, sessionId: String): String! @aws_api_key @aws_cognito_user_pools
+  askCourseChatbot(courseId: String, message: String!, sessionId: String, imageS3Key: String): String @aws_api_key @aws_cognito_user_pools
   demystifyJargon(term: String!): String! @aws_api_key @aws_cognito_user_pools
   getContentDemandTelemetry: [ContentDemand!]! @aws_api_key @aws_cognito_user_pools
   getChatEvaluations: [ChatEvaluation!]! @aws_api_key @aws_cognito_user_pools

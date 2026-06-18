@@ -37,6 +37,28 @@ export const handler = async (event: any) => {
       console.error("Error generating presigned upload URL:", error);
       throw error;
     }
+  } else if (fieldName === "getDiagramUploadUrl") {
+    // Student-uploaded architecture diagrams reviewed by the chatbot.
+    const fileName = event.arguments?.fileName || `diagram-${Date.now()}.png`;
+    const contentType = event.arguments?.contentType || "image/png";
+    const key = `diagrams/${fileName}`;
+
+    try {
+      const command = new PutObjectCommand({
+        Bucket: bucketName,
+        Key: key,
+        ContentType: contentType,
+      });
+
+      const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+      return {
+        url: uploadUrl,
+        fileName: key,  // Return the full key so the client can pass it to askCourseChatbot.
+      };
+    } catch (error: any) {
+      console.error("Error generating presigned diagram upload URL:", error);
+      throw error;
+    }
   } else if (fieldName === "getVideoUrl") {
     const videoUri = event.arguments?.videoUri;
     if (!videoUri) throw new Error("videoUri argument is required");

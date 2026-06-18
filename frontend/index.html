@@ -216,6 +216,7 @@
           <!-- Prompt Box -->
           <div class="main-prompt-box-wrapper" style="width: 100%; max-width: 800px; margin-left: auto; margin-right: auto; margin-top: auto; padding-top: 1rem; flex-shrink: 0;">
             <div class="main-prompt-box" style="background: rgba(21, 18, 27, 0.7); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 16px; padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem; position: relative;">
+              <div id="diagram-attachment-chip" class="diagram-attachment-chip" style="display: none;"></div>
               <div style="display: flex; gap: 0.75rem; align-items: flex-start;">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="color: #a855f7; flex-shrink: 0; margin-top: 0.15rem;">
                   <path d="M12 3L14.4 9.6L21 12L14.4 14.4L12 21L9.6 14.4L3 12L9.6 9.6L12 3Z" fill="currentColor"/>
@@ -224,9 +225,10 @@
               </div>
               <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 0.75rem; margin-top: 0.25rem;">
                 <div style="display: flex; gap: 0.25rem;">
-                  <button class="chat-action-btn" title="Attach file" style="background: transparent; border: none; color: var(--text-muted); cursor: pointer; padding: 0.35rem 0.6rem; font-size: 0.8rem; display: flex; align-items: center; gap: 0.4rem; transition: var(--transition-smooth); outline: none; border-radius: 6px;">
+                  <input id="diagram-file-input" type="file" accept="image/png,image/jpeg" style="display: none;">
+                  <button id="btn-chat-attach-diagram" class="chat-action-btn" title="Attach a cloud architecture diagram for review" style="background: transparent; border: none; color: var(--text-muted); cursor: pointer; padding: 0.35rem 0.6rem; font-size: 0.8rem; display: flex; align-items: center; gap: 0.4rem; transition: var(--transition-smooth); outline: none; border-radius: 6px;">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
-                    <span style="font-size: 0.75rem; font-weight: 500;">Attach</span>
+                    <span style="font-size: 0.75rem; font-weight: 500;">Review diagram</span>
                   </button>
                   <button class="chat-action-btn" title="Settings" style="background: transparent; border: none; color: var(--text-muted); cursor: pointer; padding: 0.35rem 0.6rem; font-size: 0.8rem; display: flex; align-items: center; gap: 0.4rem; transition: var(--transition-smooth); outline: none; border-radius: 6px;">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>

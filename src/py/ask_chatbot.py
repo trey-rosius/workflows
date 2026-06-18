@@ -49,6 +49,9 @@ logger.setLevel(logging.INFO)
 
 AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
 
+# Media bucket — student diagrams uploaded for architecture review (PNG/JPG).
+MEDIA_BUCKET_NAME = os.environ.get("MEDIA_BUCKET_NAME")
+
 # DynamoDB tables
 COURSES_TABLE_NAME = os.environ.get("COURSES_TABLE_NAME")
 CHAT_SESSIONS_TABLE_NAME = os.environ.get("CHAT_SESSIONS_TABLE_NAME")
@@ -77,6 +80,11 @@ TAVILY_SECRET_ID = os.environ.get("TAVILY_SECRET_NAME", "educloud/tavily-api-key
 # Bedrock models
 MODEL_FAST = "amazon.nova-lite-v1:0"
 MODEL_PRO = "amazon.nova-pro-v1:0"
+# Architecture-review intent uses Claude Sonnet via the US cross-region inference
+# profile. Claude's vision substantially outperforms Nova Pro on diagram reading —
+# correctly counting nodes/arrows and identifying which services are drawn. The
+# rest of the chatbot stays on Nova for cost.
+MODEL_VISION = "us.anthropic.claude-sonnet-4-6"
 EMBED_MODEL = "amazon.titan-embed-text-v2:0"
 EMBED_DIMENSIONS = 1024
 
@@ -118,6 +126,12 @@ ASSESSMENT_KEYWORDS = (
     "diagnostic", "evaluation", "assessment", "quiz me", "which course", "how to start",
     "roadmap", "study plan", "curriculum", "what should i learn", "how do i become",
     "career path", "skills i need", "which courses", "course recommendation",
+    # Open-ended learning-goal expressions — these signal the student wants a
+    # tailored path rather than a one-off answer, so kick off onboarding.
+    "want to learn", "would like to learn", "wanna learn",
+    "want to become", "want to be a ", "want to be an ",
+    "teach me about", "help me learn", "interested in learning",
+    "i'm interested in", "looking to learn",
 )
 ONBOARDING_INTRO_SIGNALS = (
     "i've gained", "i have gained", "i've been", "i have been", "i've worked",
@@ -190,6 +204,7 @@ INJECTION_PATTERNS = (
 bedrock_runtime_client = boto3.client("bedrock-runtime", region_name=AWS_REGION)
 dynamodb_client = boto3.client("dynamodb", region_name=AWS_REGION)
 s3_vectors_client = boto3.client("s3vectors")
+s3_client = boto3.client("s3", region_name=AWS_REGION)
 _deserializer = TypeDeserializer()
 
 # Lazily-initialised secrets client + cached Tavily key (warm-Lambda reuse).
@@ -500,15 +515,23 @@ def local_guardrail_check(message: str) -> Optional[str]:
 # Intent detection
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _clean_option_text(raw: str) -> str:
+    """Strip whitespace and any stray markdown bold markers from option text."""
+    return raw.strip().strip("*").strip()
+
+
 # Recognises single-letter replies like "A", "B.", "c)", "Other".
-LETTER_REPLY_PATTERN = re.compile(r"^\s*([A-E])\s*[.)\-—:]?\s*$", re.IGNORECASE)
+LETTER_REPLY_PATTERN = re.compile(r"^\s*([A-G])\s*[.)\-—:]?\s*$", re.IGNORECASE)
 OTHER_REPLY_PATTERN = re.compile(r"^\s*other\s*[.)\-—:]?\s*$", re.IGNORECASE)
-# Parses an option line from a prior assistant turn, e.g.:
+# Parses an option line from a prior assistant turn. Tolerates several markdown
+# decorations:
 #   **A.** I have no prior experience...
 #   A) I have no prior experience...
 #   **A** — I have no prior experience...
+# The extra (?:\*\*)? after the punctuation handles the closing `**` from
+# `**A.** text` — without it, the captured text leaks "** " at the front.
 OPTION_LINE_PATTERN = re.compile(
-    r"^\s*(?:\*\*)?\s*([A-E])\s*(?:\*\*)?\s*[.)\-—:]\s*(.+?)\s*\*?\*?\s*$",
+    r"^\s*(?:\*\*)?\s*([A-G])\s*(?:\*\*)?\s*[.)\-—:]\s*(?:\*\*)?\s*(.+?)\s*(?:\*\*)?\s*$",
     re.IGNORECASE | re.MULTILINE,
 )
 
@@ -534,12 +557,84 @@ def expand_letter_choice(message: str, history: list[dict[str, str]]) -> str:
         content = turn.get("content", "")
         options: dict[str, str] = {}
         for option_match in OPTION_LINE_PATTERN.finditer(content):
-            options[option_match.group(1).upper()] = option_match.group(2).strip().strip("*").strip()
+            options[option_match.group(1).upper()] = _clean_option_text(option_match.group(2))
         if letter in options:
             return f"{letter} — {options[letter]}"
         # Most recent assistant turn had no parseable lettered list; give up.
         break
     return message
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# A2UI — convert lettered options into a declarative button surface
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# The chatbot's onboarding turns produce multiple-choice questions formatted as
+# markdown bullets like "**A.** ...". Rather than asking students to type "A",
+# we replace the options block with an A2UI v0.9.1 ``updateComponents`` message
+# inside a ``` ```a2ui ``` fenced code block. The frontend's markdown parser
+# preserves the fenced block; a small renderer post-processes the rendered HTML
+# and swaps the block for native clickable buttons that submit the full option
+# text as the next user message.
+
+A2UI_OPTION_LINE_PATTERN = re.compile(
+    r"^\s*(?:\*\*)?\s*([A-G]|Other)\s*(?:\*\*)?\s*[.)\-—:]\s*(?:\*\*)?\s*(.+?)\s*(?:\*\*)?\s*$",
+    re.IGNORECASE,
+)
+A2UI_VERSION = "v0.9.1"
+A2UI_SURFACE_ID = "chatbot"
+
+
+def convert_options_to_a2ui(answer: str) -> str:
+    """Replace a contiguous lettered options block with a fenced ``a2ui`` block.
+
+    Returns ``answer`` unchanged if no block is detected. The original markdown
+    is what gets persisted to ``chatHistory`` (callers keep both versions); only
+    the value streamed to the client is rewritten so users get clickable buttons
+    in place of "**A.** ..." text lines.
+    """
+    lines = answer.split("\n")
+    option_indices: list[int] = []
+    options: list[tuple[str, str]] = []
+    for idx, line in enumerate(lines):
+        match = A2UI_OPTION_LINE_PATTERN.match(line)
+        if match:
+            option_indices.append(idx)
+            letter = match.group(1).strip()
+            text = _clean_option_text(match.group(2))
+            options.append((letter, text))
+
+    if len(options) < 2:
+        return answer
+
+    first, last = option_indices[0], option_indices[-1]
+    for idx in range(first, last + 1):
+        if idx in option_indices or not lines[idx].strip():
+            continue
+        return answer  # Non-contiguous block — leave as-is rather than mangle.
+
+    components = []
+    for i, (letter, text) in enumerate(options):
+        is_other = letter.lower() == "other"
+        label = text if is_other else f"{letter}. {text}"
+        action_value = text if is_other else f"{letter} — {text}"
+        components.append({
+            "id": f"opt-{i}",
+            "component": "Button",
+            "label": label,
+            "actionValue": action_value,
+        })
+
+    a2ui_message = {
+        "version": A2UI_VERSION,
+        "updateComponents": {
+            "surfaceId": A2UI_SURFACE_ID,
+            "components": components,
+        },
+    }
+    block_lines = ["```a2ui", json.dumps(a2ui_message), "```"]
+    new_lines = lines[:first] + block_lines + lines[last + 1:]
+    return "\n".join(new_lines).strip()
 
 
 def detect_assessment_intent(message: str) -> bool:
@@ -834,7 +929,7 @@ Your mission is to get to know the student, understand their background, goals, 
 Guidelines:
 1. Ask thoughtful follow-up questions to understand: their current skills, their career goal, what they already know, and what they find confusing or exciting.
 2. Be conversational, encouraging, and warm.
-3. EVERY follow-up question you ask MUST be presented as a multiple-choice list with lettered options (A, B, C, and optionally D). Put each option on its own line, formatted as `**A.** <option>`. Always include an "**Other** — tell me in your own words" option as the last choice so the student can free-text if none fit. Phrase the question first in one short sentence, then list the choices.
+3. EVERY follow-up question you ask MUST be presented as a multiple-choice list with lettered options. Use 3 to 6 options labelled A, B, C, D, E, F. Put each option on its own line, formatted as `**A.** <option>`. Always include an "**Other** — tell me in your own words" option as the last choice so the student can free-text if none fit. Phrase the question first in one short sentence, then list the choices.
 4. When asking about career goals, the lettered options MUST be drawn from EduCloud's tracks above (Cloud Engineer, Solutions Architect, AI Engineer / AI Cloud Engineer, Forward Deployed Engineer, DevOps / Platform Engineer, Machine Learning Engineer, Cloud Security Engineer). Do NOT suggest off-platform tracks like generic cybersecurity, data science, or web development unless the student volunteers them.
 5. Ask ONE question per response. Do not stack a follow-up question and a "ready for plan?" prompt in the same message — pick one.
 6. Once you have gathered enough information (background, goal, and skill level), offer to create a personalized study plan with two choices: `**A.** Yes, create my study plan` and `**B.** I'd like to share a bit more first`.
@@ -1078,15 +1173,21 @@ def handle_demystify_jargon(arguments: dict[str, Any]) -> str:
 
 def _start_onboarding(session_id: str, message: str, system_text: str, token_usage: int, today: str) -> str:
     """Kick off the conversational onboarding flow and persist the first turn."""
+    # Buffer — we rewrite the lettered options block into an A2UI button surface
+    # before streaming, which we can't do incrementally.
     answer, blocked, tokens = invoke_bedrock_with_guardrail(
         MODEL_FAST,
         system_text,
         [{"role": "user", "content": [{"text": message}]}],
         apply_guardrail=False,
-        stream_session_id=session_id,
     )
     if blocked:
         return answer
+
+    display = convert_options_to_a2ui(answer)
+    publish_chunk(session_id, display, sequence=0, is_complete=False)
+    publish_chunk(session_id, "", sequence=1, is_complete=True)
+
     save_session(session_id, {
         "state": "ONBOARDING",
         "chatHistory": [
@@ -1145,7 +1246,10 @@ def handle_onboarding_turn(
 
     # Normal chat reply — publish it as a single chunk so the frontend renders
     # immediately (the WebSocket is still open waiting on the first chunk).
-    publish_chunk(session_id, answer, sequence=0, is_complete=False)
+    # The lettered options block (if any) is rewritten to an A2UI surface so
+    # the user gets clickable buttons instead of plain text.
+    display = convert_options_to_a2ui(answer)
+    publish_chunk(session_id, display, sequence=0, is_complete=False)
     publish_chunk(session_id, "", sequence=1, is_complete=True)
 
     history += [
@@ -1229,6 +1333,208 @@ def _store_semantic_cache(message: str, answer: str, query_vector: list[float]) 
         )
     except Exception as exc:  # noqa: BLE001 - caching is best-effort
         logger.warning("Failed to cache prompt response: %s", exc)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Architecture review (multimodal — image + prompt → AWS Well-Architected review)
+# ─────────────────────────────────────────────────────────────────────────────
+
+ARCHITECTURE_REVIEW_SYSTEM = """You are a senior cloud solutions architect at \
+EduCloud Academy reviewing a student's architecture diagram. You are critiquing \
+TOPOLOGY — the services drawn, where they sit, and the arrows between them. \
+You are NOT critiquing runtime configuration.
+
+## CRITICAL RULES — read these carefully before writing anything
+
+1. **Only critique what is visible on the diagram.** A diagram shows topology: \
+which services exist, where they sit, and how data flows between them via arrows. \
+A diagram does NOT show runtime configuration. The following are INVISIBLE on a \
+diagram and you MUST NOT mention them:
+   - API Gateway stages, throttling, usage plans, custom domains
+   - Lambda error handling, retries, timeouts, DLQ (unless a DLQ is drawn)
+   - SQS visibility timeout, redrive policy, CloudWatch alarms, metrics
+   - DynamoDB auto-scaling, capacity mode, throughput, GSI design
+   - IAM least privilege, role policies, fine-grained permissions
+   - Encryption at rest/in transit (unless KMS is drawn)
+   - Logging, monitoring, observability, X-Ray, alarms
+   - Tagging, cost allocation, billing
+   - Backup, point-in-time recovery, retention
+   - VPC, security groups, NACLs (unless a VPC boundary is drawn)
+   If you find yourself writing about any of those, DELETE that bullet.
+
+2. **Flag services that should not be drawn as nodes.** IAM, KMS, CloudTrail, \
+CloudWatch (passive observers), Secrets Manager (when it's just a cross-cutting \
+helper), and similar policy/observability services are PERMISSIONS or SIDECARS, \
+not flow nodes. If they appear as a hop in a data flow (e.g. "Lambda → IAM → \
+DynamoDB"), that's a topology mistake — the IAM box should be removed entirely \
+and the arrow goes Lambda → DynamoDB directly. Always call this out when you see it.
+
+3. **Focus your review on topology issues** that ARE visible:
+   - **Wrong placement** — a service in the wrong position in the data flow (e.g. \
+a queue between a Lambda and DynamoDB when the Lambda just needs to read).
+   - **Wrong direction** — arrows that don't match the data flow (e.g. a "consumer" \
+Lambda with arrows pointing INTO SQS rather than out of it).
+   - **Missing service** — what the flow obviously needs but is not drawn (e.g. an \
+async writer without a queue in front; an event-driven worker without a trigger).
+   - **Anti-patterns** — lambda-calling-lambda synchronously, a single Lambda \
+handling many unrelated operations, public S3 buckets in flow, missing event \
+source mapping between SQS and its consumer Lambda.
+   - **Naming confusion** — labels that don't match the role (a "consumer" that's \
+actually producing).
+
+4. **Reference the drawn labels.** Use the student's own labels ("the 'consumer' \
+Lambda at the top", "Get All Apnt") so they can map your feedback to the picture.
+
+5. **Don't invent components.** If something is missing, say "I don't see X". \
+Don't assume it exists somewhere off-diagram.
+
+## Output (strict markdown)
+
+## Summary
+One short paragraph describing what the diagram is trying to do, based purely on what's drawn.
+
+## What's Working ✓
+- Bulleted list of services that ARE placed and connected correctly, with one-line reasons.
+
+## Issues ⚠
+For each issue use this exact sub-structure:
+- **<Specific element using the drawn label>** — <topology problem in one line>
+  - **Why it matters:** <one-line concrete consequence>
+  - **Fix:** <one concrete change to the diagram — move it, remove it, add a missing service, flip an arrow>
+
+## Suggestions to Improve 💡
+- Optional topology improvements that aren't strict issues (e.g. CloudFront in front \
+of API Gateway for caching; an EventBridge bus for cleaner fan-out).
+
+## Next Steps
+- 2–3 prioritised topology principles or services the student should learn next.
+
+## Structured findings — REQUIRED
+
+After the markdown sections, emit a single fenced code block tagged \
+`a2ui-findings` containing a JSON object listing every finding from the review \
+that has a clear location on the diagram. The frontend uses this to power a \
+click-to-focus zoom: clicking a finding pans/zooms the diagram to its bbox. \
+Only one finding is highlighted at a time, so being slightly imprecise is OK — \
+generous padding is better than tight.
+
+bbox is `[x, y, w, h]` normalised to [0.0, 1.0] (0,0 = top-left, 1,1 = \
+bottom-right). Pad to comfortably contain the service + a bit of surrounding \
+context.
+
+severity values: `"issue"` (problem with topology), `"working"` (correctly \
+placed/used), `"suggestion"` (optional improvement).
+
+Skip findings without a clear visual location. Every `id` must be unique.
+
+Example (illustrative coordinates — do NOT copy them):
+
+```a2ui-findings
+{
+  "version": "v0.9.1",
+  "findings": [
+    {
+      "id": "iam-hop",
+      "severity": "issue",
+      "service": "IAM",
+      "title": "IAM drawn as a runtime hop",
+      "bbox": [0.58, 0.32, 0.18, 0.22],
+      "detail": "Remove this box — IAM is a permission, not a flow node."
+    }
+  ]
+}
+```
+
+The block must be valid JSON. Emit exactly one block, at the very end.
+
+Tone: warm, mentoring, educational. The student is learning — show them the \
+topology principle behind every critique. No nagging about config they couldn't draw."""
+
+
+def _fetch_diagram_bytes(s3_key: str) -> tuple[bytes, str]:
+    """Fetch a diagram from the media bucket. Returns ``(bytes, format)``.
+
+    ``format`` is the Bedrock Converse image format string ("png" or "jpeg").
+    Raises ``ValueError`` for unsupported formats or missing config.
+    """
+    if not MEDIA_BUCKET_NAME:
+        raise ValueError("MEDIA_BUCKET_NAME is not configured")
+    response = s3_client.get_object(Bucket=MEDIA_BUCKET_NAME, Key=s3_key)
+    body = response["Body"].read()
+    content_type = (response.get("ContentType") or "").lower()
+    key_lower = s3_key.lower()
+
+    if "png" in content_type or key_lower.endswith(".png"):
+        return body, "png"
+    if "jpeg" in content_type or "jpg" in content_type or key_lower.endswith((".jpg", ".jpeg")):
+        return body, "jpeg"
+    raise ValueError(f"Unsupported diagram format for {s3_key} (content-type {content_type!r})")
+
+
+def handle_architecture_review(
+    session_id: str,
+    message: str,
+    image_s3_key: str,
+    session_data: dict[str, Any],
+    token_usage: int,
+    today: str,
+) -> str:
+    """Run a multimodal architecture review on an uploaded diagram.
+
+    Streams the markdown review back through the existing chunk pipeline and
+    persists the review (text only) into ``chatHistory`` so follow-up text-only
+    turns can reference what the model said about the diagram.
+    """
+    try:
+        image_bytes, image_format = _fetch_diagram_bytes(image_s3_key)
+    except Exception as exc:  # noqa: BLE001 - bubble a friendly error to the user
+        logger.error("Failed to fetch diagram %s: %s", image_s3_key, exc)
+        publish_chunk(session_id, "I couldn't load that diagram — please try uploading it again.", sequence=0, is_complete=False)
+        publish_chunk(session_id, "", sequence=1, is_complete=True)
+        return "I couldn't load that diagram — please try uploading it again."
+
+    user_prompt = message.strip() or (
+        "Please review this cloud architecture diagram in depth, calling out "
+        "what's working and what needs improvement."
+    )
+
+    messages = [{
+        "role": "user",
+        "content": [
+            {"text": user_prompt},
+            {"image": {"format": image_format, "source": {"bytes": image_bytes}}},
+        ],
+    }]
+
+    # Guardrails disabled here: a well-formed architectural critique routinely
+    # mentions services and patterns the tutor guardrail's "non-educational
+    # software development" topic blocks. The review intent itself is purely
+    # educational.
+    answer, blocked, tokens = invoke_bedrock_with_guardrail(
+        MODEL_VISION,
+        ARCHITECTURE_REVIEW_SYSTEM,
+        messages,
+        apply_guardrail=False,
+        stream_session_id=session_id,
+    )
+    if blocked:
+        return answer
+
+    # Save the review into chatHistory so subsequent text-only turns can
+    # answer follow-up questions ("tell me more about the Lambda issue").
+    history: list[dict[str, str]] = session_data.get("chatHistory", [])
+    history += [
+        {"role": "user", "content": f"[Uploaded diagram: {image_s3_key}]\n{user_prompt}"},
+        {"role": "assistant", "content": answer},
+    ]
+    save_session(session_id, {
+        "state": session_data.get("state", "ACTIVE"),
+        "chatHistory": history,
+        "lastDiagramS3Key": image_s3_key,
+        "dailyTokenUsage": token_usage + tokens,
+        "lastUsageDate": today,
+    })
+    return answer
 
 
 def handle_chat(
@@ -1331,13 +1637,17 @@ def handler(event: dict[str, Any], context: Any) -> Any:
     course_id = arguments.get("courseId")
     message = arguments.get("message")
     session_id = arguments.get("sessionId")
+    image_s3_key = arguments.get("imageS3Key")
 
     if not message:
         raise ValueError("Missing 'message' argument")
     if not session_id:
         session_id = f"anon-session-{course_id or 'global'}"
 
-    logger.info("Message: %s | CourseId: %s | SessionId: %s", message, course_id, session_id)
+    logger.info(
+        "Message: %s | CourseId: %s | SessionId: %s | Image: %s",
+        message, course_id, session_id, image_s3_key,
+    )
 
     # Audit EVERY user prompt before any processing or guardrail short-circuit.
     record_prompt_audit(session_id, message, field_name=field_name, course_id=course_id)
@@ -1345,11 +1655,18 @@ def handler(event: dict[str, Any], context: Any) -> Any:
     session_data = get_session(session_id) or {}
     state = session_data.get("state", "ACTIVE")
 
-    # Daily token budget (reset at date rollover).
     today = time.strftime("%Y-%m-%d")
     token_usage = int(session_data.get("dailyTokenUsage", 0))
     if session_data.get("lastUsageDate", "") != today:
         token_usage = 0
+
+    # Architecture-review intent: signalled by an uploaded diagram. Short-circuits
+    # all other routing (onboarding, RAG chat, etc.) because the diagram + user's
+    # accompanying note is a self-contained turn.
+    if image_s3_key:
+        return handle_architecture_review(
+            session_id, message, image_s3_key, session_data, token_usage, today,
+        )
 
     # Global reset command.
     if message.strip().lower() in RESET_COMMANDS:

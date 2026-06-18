@@ -163,6 +163,307 @@ function parseMarkdown(mdText) {
   return `<div class="markdown-body">${html}</div>`;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// A2UI renderer (v0.9.1, scope: choice surfaces)
+// ─────────────────────────────────────────────────────────────────────────────
+// The Lambda emits multiple-choice questions as ```a2ui fenced JSON blocks.
+// After parseMarkdown runs, scan the rendered HTML for those blocks and swap
+// each in for a row of native buttons. Clicking a button submits the option's
+// full text as the next chat message via the supplied `sendFn`.
+function renderA2UIBlocks(rootEl, sendFn) {
+  if (!rootEl || typeof sendFn !== "function") return;
+  const codeBlocks = rootEl.querySelectorAll('code.language-a2ui');
+  codeBlocks.forEach((codeEl) => {
+    const container = codeEl.closest('pre') || codeEl;
+    let msg;
+    try {
+      msg = JSON.parse(codeEl.textContent);
+    } catch (e) {
+      console.warn("Failed to parse A2UI block:", e);
+      return;
+    }
+    const surface = buildA2UIChoiceSurface(msg, sendFn);
+    if (surface) container.replaceWith(surface);
+  });
+}
+
+// Enhance chat replies that reference platform courses: every `<a href="#course/ID">`
+// link that sits inside an `<li>` is swapped for a rich card with the course's
+// image, title, description, and the rationale the model wrote next to the
+// link. Inline links (in prose) are left untouched so the global click handler
+// still routes them.
+function renderCourseCards(rootEl) {
+  if (!rootEl) return;
+  const anchors = rootEl.querySelectorAll('a[href^="#course/"]');
+  if (anchors.length === 0) return;
+
+  // Need the catalog loaded to know image/description for each course.
+  if (!Array.isArray(courses) || courses.length === 0) {
+    if (typeof loadCourses === 'function') {
+      loadCourses().then(() => renderCourseCards(rootEl)).catch(() => {});
+    }
+    return;
+  }
+
+  const replacements = [];
+  anchors.forEach((anchor) => {
+    const li = anchor.closest('li');
+    if (!li) return;
+    const href = anchor.getAttribute('href');
+    const courseId = href.split('/').pop();
+    const course = courses.find((c) => c.courseId === courseId);
+    if (!course) return;
+
+    // The rationale is whatever text the model wrote after the link inside
+    // the same <li>. Strip the link text + any leading dash/em-dash.
+    const linkText = anchor.textContent || '';
+    let rationale = li.textContent.replace(linkText, '').trim();
+    rationale = rationale.replace(/^[—–\-:]\s*/, '').trim();
+
+    // The card is an <a href="#course/ID"> so the existing global click
+    // handler (anchors with href #course/...) handles the workspace switch
+    // and course selection. No bespoke click logic needed here.
+    const card = document.createElement('a');
+    card.className = 'a2ui-course-card';
+    card.href = `#course/${courseId}`;
+    card.dataset.courseId = courseId;
+    card.innerHTML = `
+      ${course.image ? `<div class="a2ui-course-card-image" style="background-image: url('${course.image}')"></div>` : '<div class="a2ui-course-card-image a2ui-course-card-image-placeholder"></div>'}
+      <div class="a2ui-course-card-body">
+        <h4 class="a2ui-course-card-title"></h4>
+        <p class="a2ui-course-card-desc"></p>
+        ${rationale ? '<p class="a2ui-course-card-rationale"></p>' : ''}
+      </div>
+      <div class="a2ui-course-card-footer">
+        <span class="a2ui-course-card-cta">View course →</span>
+      </div>
+    `;
+    // textContent assignments avoid HTML injection from course data.
+    card.querySelector('.a2ui-course-card-title').textContent = course.title || '';
+    card.querySelector('.a2ui-course-card-desc').textContent = course.description || '';
+    const ratEl = card.querySelector('.a2ui-course-card-rationale');
+    if (ratEl) ratEl.textContent = rationale;
+
+    replacements.push({ li, card });
+  });
+
+  // Apply replacements after the loop so we don't mutate the NodeList while
+  // iterating.
+  replacements.forEach(({ li, card }) => {
+    const parent = li.parentElement;
+    li.replaceWith(card);
+    // If the parent <ul> now only contains course cards, convert it into a
+    // grid container so the cards lay out side-by-side instead of stacked.
+    if (parent && parent.tagName === 'UL') {
+      const allCards = Array.from(parent.children).every(
+        (c) => c.classList && c.classList.contains('a2ui-course-card')
+      );
+      if (allCards) {
+        const grid = document.createElement('div');
+        grid.className = 'a2ui-course-card-grid';
+        while (parent.firstChild) grid.appendChild(parent.firstChild);
+        parent.replaceWith(grid);
+      }
+    }
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Diagram findings — click-to-focus zoom (no Konva; CSS positioning only)
+// ─────────────────────────────────────────────────────────────────────────────
+// The Lambda emits a fenced `a2ui-findings` JSON block at the end of an
+// architecture review. This renderer swaps the block for an interactive panel:
+// the diagram sits in an overflow:hidden viewport above a list of severity-
+// coloured finding cards. Clicking a card pans/zooms the diagram to that bbox
+// with a smooth CSS transition; only one finding is highlighted at a time, so
+// imprecise model coords don't pile up the way Phase 2's stacked rectangles did.
+
+const diagramDataUrlsByResponseId = {};
+
+function severityColor(s) {
+  if (s === 'working') return '#22c55e';
+  if (s === 'suggestion') return '#3b82f6';
+  return '#ef4444';
+}
+
+function renderDiagramFindings(rootEl) {
+  if (!rootEl) return;
+  const codeBlocks = rootEl.querySelectorAll('code.language-a2ui-findings');
+  if (codeBlocks.length === 0) return;
+
+  const diagramDataUrl = diagramDataUrlsByResponseId[rootEl.id];
+  if (!diagramDataUrl) return;
+
+  codeBlocks.forEach((codeEl) => {
+    const container = codeEl.closest('pre') || codeEl;
+    let payload;
+    try {
+      payload = JSON.parse(codeEl.textContent);
+    } catch (e) {
+      return; // Block may still be streaming — let a later pass handle it.
+    }
+    const findings = (payload && payload.findings) || [];
+    if (findings.length === 0) return;
+
+    const review = document.createElement('div');
+    review.className = 'diag-review';
+    review.innerHTML = `
+      <div class="diag-canvas-toolbar">
+        <span class="diag-canvas-title">Diagram review</span>
+        <button type="button" class="diag-show-full-btn">Show full diagram</button>
+      </div>
+      <div class="diag-canvas-wrap">
+        <img class="diag-canvas-img" alt="">
+        <div class="diag-canvas-highlight"></div>
+      </div>
+      <div class="diag-findings-list"></div>
+    `;
+    const wrap = review.querySelector('.diag-canvas-wrap');
+    const img = review.querySelector('.diag-canvas-img');
+    const highlight = review.querySelector('.diag-canvas-highlight');
+    const list = review.querySelector('.diag-findings-list');
+    const fullBtn = review.querySelector('.diag-show-full-btn');
+
+    container.replaceWith(review);
+
+    let activeFindingId = null;
+
+    function resetZoom() {
+      const cw = wrap.clientWidth;
+      const ch = wrap.clientHeight;
+      const nw = img.naturalWidth;
+      const nh = img.naturalHeight;
+      if (!nw || !nh) return;
+      const scale = Math.min(cw / nw, ch / nh);
+      const dw = nw * scale;
+      const dh = nh * scale;
+      img.style.width = `${dw}px`;
+      img.style.height = `${dh}px`;
+      img.style.left = `${(cw - dw) / 2}px`;
+      img.style.top = `${(ch - dh) / 2}px`;
+      highlight.style.display = 'none';
+    }
+
+    function zoomTo(bbox, color) {
+      const cw = wrap.clientWidth;
+      const ch = wrap.clientHeight;
+      const nw = img.naturalWidth;
+      const nh = img.naturalHeight;
+      if (!nw || !nh) return;
+      const bx = Math.max(0, Math.min(1, Number(bbox[0]) || 0));
+      const by = Math.max(0, Math.min(1, Number(bbox[1]) || 0));
+      const bw = Math.max(0.01, Math.min(1 - bx, Number(bbox[2]) || 0.05));
+      const bh = Math.max(0.01, Math.min(1 - by, Number(bbox[3]) || 0.05));
+
+      // Pad the bbox by 40% on each side so the student sees surrounding context.
+      const padX = bw * 0.4;
+      const padY = bh * 0.4;
+      const fx = Math.max(0, bx - padX);
+      const fy = Math.max(0, by - padY);
+      const fw = Math.min(1 - fx, bw + 2 * padX);
+      const fh = Math.min(1 - fy, bh + 2 * padY);
+
+      // Scale so the padded bbox fits the viewport. Clamp the scale so we
+      // never zoom in further than 3.5× the fit-to-container baseline.
+      const baseScale = Math.min(cw / nw, ch / nh);
+      const desiredScale = Math.min(cw / (fw * nw), ch / (fh * nh));
+      const scale = Math.min(desiredScale, baseScale * 3.5);
+      const dw = nw * scale;
+      const dh = nh * scale;
+
+      // Centre the bbox in the viewport.
+      const bcxDisp = (bx + bw / 2) * dw;
+      const bcyDisp = (by + bh / 2) * dh;
+      img.style.width = `${dw}px`;
+      img.style.height = `${dh}px`;
+      img.style.left = `${cw / 2 - bcxDisp}px`;
+      img.style.top = `${ch / 2 - bcyDisp}px`;
+
+      // Position the highlight box on top of the image at the bbox.
+      highlight.style.display = 'block';
+      highlight.style.left = `${cw / 2 - bcxDisp + bx * dw}px`;
+      highlight.style.top = `${ch / 2 - bcyDisp + by * dh}px`;
+      highlight.style.width = `${bw * dw}px`;
+      highlight.style.height = `${bh * dh}px`;
+      highlight.style.borderColor = color;
+      highlight.style.boxShadow = `0 0 0 9999px rgba(0, 0, 0, 0.45)`;
+    }
+
+    img.addEventListener('load', () => {
+      resetZoom();
+      // Run again on resize so the diagram stays fit-to-container.
+      const ro = new ResizeObserver(() => {
+        if (activeFindingId === null) resetZoom();
+      });
+      ro.observe(wrap);
+    });
+    img.src = diagramDataUrl;
+
+    fullBtn.addEventListener('click', () => {
+      activeFindingId = null;
+      list.querySelectorAll('.diag-finding-card').forEach((el) => {
+        el.classList.remove('diag-finding-card-active');
+      });
+      resetZoom();
+    });
+
+    findings.forEach((f, idx) => {
+      const num = idx + 1;
+      const color = severityColor(f.severity);
+      const card = document.createElement('button');
+      card.type = 'button';
+      card.className = `diag-finding-card diag-finding-${f.severity || 'issue'}`;
+      card.innerHTML = `
+        <span class="diag-finding-num"></span>
+        <div class="diag-finding-body">
+          <div class="diag-finding-title"></div>
+          <div class="diag-finding-detail"></div>
+        </div>
+      `;
+      card.querySelector('.diag-finding-num').textContent = String(num);
+      card.querySelector('.diag-finding-num').style.background = color;
+      const titleText = (f.service ? `${f.service} — ` : '') + (f.title || '');
+      card.querySelector('.diag-finding-title').textContent = titleText;
+      card.querySelector('.diag-finding-detail').textContent = f.detail || '';
+
+      card.addEventListener('click', () => {
+        activeFindingId = f.id || `idx-${idx}`;
+        list.querySelectorAll('.diag-finding-card').forEach((el) => {
+          el.classList.remove('diag-finding-card-active');
+        });
+        card.classList.add('diag-finding-card-active');
+        zoomTo(f.bbox || [0, 0, 0.1, 0.1], color);
+      });
+      list.appendChild(card);
+    });
+  });
+}
+
+function buildA2UIChoiceSurface(msg, sendFn) {
+  const components = (msg && msg.updateComponents && msg.updateComponents.components) || [];
+  if (components.length === 0) return null;
+
+  const surface = document.createElement('div');
+  surface.className = 'a2ui-surface a2ui-choice-grid';
+  let rendered = 0;
+  for (const c of components) {
+    if (c.component !== 'Button') continue;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'a2ui-choice-btn';
+    btn.textContent = c.label || '';
+    btn.addEventListener('click', () => {
+      // Disable every button in this surface so the student can't double-pick.
+      surface.querySelectorAll('button').forEach((b) => { b.disabled = true; });
+      btn.classList.add('a2ui-choice-btn-selected');
+      sendFn(c.actionValue || c.label || '');
+    });
+    surface.appendChild(btn);
+    rendered++;
+  }
+  return rendered > 0 ? surface : null;
+}
+
 // AppSync WebSocket connection configuration and helpers
 function getAppSyncWebSocketUrl() {
   const url = new URL(ENV.GRAPHQL_API_ENDPOINT);
@@ -2164,6 +2465,13 @@ chatbotInput.addEventListener("keydown", (e) => {
   }
 });
 
+// Send-helper invoked by A2UI button clicks inside the drawer chat.
+function drawerChatSend(text) {
+  if (!chatbotInput) return;
+  chatbotInput.value = text;
+  sendChatbotMessage();
+}
+
 async function sendChatbotMessage() {
   const text = chatbotInput.value.trim();
   if (!text) return;
@@ -2207,15 +2515,21 @@ async function sendChatbotMessage() {
       
       accumulatedText += chunk;
       responseEl.innerHTML = parseMarkdown(accumulatedText);
+      renderA2UIBlocks(responseEl, drawerChatSend);
+      renderCourseCards(responseEl);
+      renderDiagramFindings(responseEl);
       chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
     }, () => {
       isStreamFinished = true;
       const typingIndicator = document.getElementById(typingId);
       if (typingIndicator) typingIndicator.remove();
-      
+
       let responseEl = document.getElementById(responseId);
       if (responseEl) {
         wrapJargonInElement(responseEl);
+        renderA2UIBlocks(responseEl, drawerChatSend);
+        renderCourseCards(responseEl);
+        renderDiagramFindings(responseEl);
         if (window.hljs) {
           responseEl.querySelectorAll('pre code').forEach((block) => {
             window.hljs.highlightElement(block);
@@ -2744,25 +3058,173 @@ if (btnCollapseSidebar && sidebarEl) {
   });
 }
 
+// Send-helper invoked by A2UI button clicks inside the main chat workspace.
+function mainChatSend(text) {
+  if (!mainChatInput) return;
+  mainChatInput.value = text;
+  sendMainChatMsg();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Diagram attachment (architecture review intent)
+// ─────────────────────────────────────────────────────────────────────────────
+// Student attaches a PNG/JPG architecture diagram. We PUT it to S3 via the
+// `getDiagramUploadUrl` presigned URL, then pass the resulting key as
+// `imageS3Key` on the next `askCourseChatbot` mutation. The Lambda detects the
+// key and routes to the multimodal review handler.
+let pendingDiagramKey = null;
+let pendingDiagramDataUrl = null;
+let pendingDiagramFilename = null;
+
+const btnAttachDiagram = document.getElementById("btn-chat-attach-diagram");
+const diagramFileInput = document.getElementById("diagram-file-input");
+const diagramAttachmentChip = document.getElementById("diagram-attachment-chip");
+
+function renderDiagramChip() {
+  if (!diagramAttachmentChip) return;
+  if (!pendingDiagramKey) {
+    diagramAttachmentChip.style.display = "none";
+    diagramAttachmentChip.innerHTML = "";
+    return;
+  }
+  diagramAttachmentChip.style.display = "flex";
+  diagramAttachmentChip.innerHTML = `
+    <img class="diagram-attachment-chip-thumb" alt="">
+    <div class="diagram-attachment-chip-meta">
+      <span class="diagram-attachment-chip-label">Diagram ready for review</span>
+      <span class="diagram-attachment-chip-filename"></span>
+    </div>
+    <button type="button" class="diagram-attachment-chip-remove" aria-label="Remove attachment">×</button>
+  `;
+  diagramAttachmentChip.querySelector(".diagram-attachment-chip-thumb").src = pendingDiagramDataUrl || "";
+  diagramAttachmentChip.querySelector(".diagram-attachment-chip-filename").textContent = pendingDiagramFilename || "";
+  diagramAttachmentChip
+    .querySelector(".diagram-attachment-chip-remove")
+    .addEventListener("click", clearPendingDiagram);
+}
+
+function clearPendingDiagram() {
+  pendingDiagramKey = null;
+  pendingDiagramDataUrl = null;
+  pendingDiagramFilename = null;
+  if (diagramFileInput) diagramFileInput.value = "";
+  renderDiagramChip();
+}
+
+function setAttachBtnBusy(busy) {
+  if (!btnAttachDiagram) return;
+  btnAttachDiagram.disabled = busy;
+  btnAttachDiagram.style.opacity = busy ? "0.5" : "1";
+  const label = btnAttachDiagram.querySelector("span");
+  if (label) label.textContent = busy ? "Uploading…" : "Review diagram";
+}
+
+if (btnAttachDiagram && diagramFileInput) {
+  btnAttachDiagram.addEventListener("click", () => diagramFileInput.click());
+
+  diagramFileInput.addEventListener("change", async () => {
+    const file = diagramFileInput.files && diagramFileInput.files[0];
+    if (!file) return;
+    if (!/^image\/(png|jpe?g)$/i.test(file.type)) {
+      alert("Please attach a PNG or JPG diagram.");
+      diagramFileInput.value = "";
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      alert("Diagram is too large (max 5 MB).");
+      diagramFileInput.value = "";
+      return;
+    }
+
+    setAttachBtnBusy(true);
+    try {
+      // 1. Get a presigned S3 URL.
+      const data = await queryGraphQL(
+        `mutation GetDiagramUploadUrl($fileName: String!, $contentType: String!) {
+          getDiagramUploadUrl(fileName: $fileName, contentType: $contentType) {
+            url
+            fileName
+          }
+        }`,
+        {
+          fileName: `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`,
+          contentType: file.type,
+        }
+      );
+
+      const uploadInfo = data.getDiagramUploadUrl;
+      if (!uploadInfo || !uploadInfo.url) throw new Error("Missing upload URL");
+
+      // 2. PUT the bytes to S3.
+      const putResponse = await fetch(uploadInfo.url, {
+        method: "PUT",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+      if (!putResponse.ok) throw new Error(`S3 upload failed (${putResponse.status})`);
+
+      // 3. Stash the S3 key + a local data URL so we can preview the chip and
+      // render the image inside the user's bubble when they send the message.
+      pendingDiagramKey = uploadInfo.fileName;
+      pendingDiagramFilename = file.name;
+      pendingDiagramDataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      renderDiagramChip();
+    } catch (err) {
+      console.error("Diagram upload failed:", err);
+      alert(`Couldn't upload diagram: ${err.message || err}`);
+    } finally {
+      setAttachBtnBusy(false);
+    }
+  });
+}
+
 // Main Chat Message Submission
 async function sendMainChatMsg() {
   if (!mainChatInput) return;
   const text = mainChatInput.value.trim();
-  if (!text) return;
+  // Capture and clear the diagram attachment BEFORE async work so a quick
+  // second click can't double-send the same upload.
+  const diagramKey = pendingDiagramKey;
+  const diagramDataUrl = pendingDiagramDataUrl;
+  if (!text && !diagramKey) return;
+  if (diagramKey) clearPendingDiagram();
 
   mainChatInput.value = "";
-  
+
   // Update state to active chat stream
   if (mainChatWelcome) mainChatWelcome.classList.add("hidden");
   if (mainChatFeatureCards) mainChatFeatureCards.classList.add("hidden");
   if (mainChatStream) mainChatStream.classList.remove("hidden");
 
-  // Append user message
-  mainChatStream.innerHTML += `
-    <div class="chat-msg-user" style="margin-bottom: 0.5rem;">
-      ${text}
-    </div>
-  `;
+  // Append user message — include the diagram thumbnail when attached so the
+  // student can see what they sent.
+  const userBubble = document.createElement("div");
+  userBubble.className = "chat-msg-user";
+  userBubble.style.marginBottom = "0.5rem";
+  if (diagramDataUrl) {
+    const img = document.createElement("img");
+    img.src = diagramDataUrl;
+    img.className = "chat-msg-user-diagram";
+    img.alt = "Uploaded architecture diagram";
+    userBubble.appendChild(img);
+  }
+  if (text) {
+    const textNode = document.createElement("div");
+    textNode.className = "chat-msg-user-text";
+    textNode.textContent = text;
+    userBubble.appendChild(textNode);
+  } else if (diagramDataUrl) {
+    const textNode = document.createElement("div");
+    textNode.className = "chat-msg-user-text";
+    textNode.textContent = "Please review this architecture.";
+    userBubble.appendChild(textNode);
+  }
+  mainChatStream.appendChild(userBubble);
   mainChatStream.scrollTop = mainChatStream.scrollHeight;
 
   const typingId = "main-typing-" + Date.now();
@@ -2776,6 +3238,11 @@ async function sendMainChatMsg() {
   mainChatStream.scrollTop = mainChatStream.scrollHeight;
 
   const responseId = "main-bot-msg-" + Date.now();
+  if (diagramDataUrl) {
+    // Stash for the click-to-focus renderer that fires after the JSON
+    // findings block streams in.
+    diagramDataUrlsByResponseId[responseId] = diagramDataUrl;
+  }
   let accumulatedText = "";
   let subscription = null;
   let isStreamFinished = false;
@@ -2795,15 +3262,21 @@ async function sendMainChatMsg() {
       
       accumulatedText += chunk;
       responseEl.innerHTML = parseMarkdown(accumulatedText);
+      renderA2UIBlocks(responseEl, mainChatSend);
+      renderCourseCards(responseEl);
+      renderDiagramFindings(responseEl);
       mainChatStream.scrollTop = mainChatStream.scrollHeight;
     }, () => {
       isStreamFinished = true;
       const typingIndicator = document.getElementById(typingId);
       if (typingIndicator) typingIndicator.remove();
-      
+
       let responseEl = document.getElementById(responseId);
       if (responseEl) {
         wrapJargonInElement(responseEl);
+        renderA2UIBlocks(responseEl, mainChatSend);
+        renderCourseCards(responseEl);
+        renderDiagramFindings(responseEl);
         if (window.hljs) {
           responseEl.querySelectorAll('pre code').forEach((block) => {
             window.hljs.highlightElement(block);
@@ -2818,16 +3291,19 @@ async function sendMainChatMsg() {
 
   try {
     const variables = {
-      message: text,
+      message: text || "Please review this architecture.",
       sessionId: chatSessionId
     };
     if (activeCourse) {
       variables.courseId = activeCourse.courseId;
     }
+    if (diagramKey) {
+      variables.imageS3Key = diagramKey;
+    }
 
     const queryStr = `
-      query AskCourseChatbot($courseId: String, $message: String!, $sessionId: String) {
-        askCourseChatbot(courseId: $courseId, message: $message, sessionId: $sessionId)
+      query AskCourseChatbot($courseId: String, $message: String!, $sessionId: String, $imageS3Key: String) {
+        askCourseChatbot(courseId: $courseId, message: $message, sessionId: $sessionId, imageS3Key: $imageS3Key)
       }
     `;
 
@@ -2854,16 +3330,24 @@ async function sendMainChatMsg() {
       mainChatStream.scrollTop = mainChatStream.scrollHeight;
     }
   } catch (err) {
-    if (subscription && typeof subscription.close === "function") {
-      try { subscription.close(); } catch(e) {}
-    }
     const typingIndicator = document.getElementById(typingId);
     if (typingIndicator) typingIndicator.remove();
-    mainChatStream.innerHTML += `
-      <div class="chat-msg-error" style="margin-bottom: 0.5rem;">
-        Failed to fetch AI response: ${err.message}
-      </div>
-    `;
+    // If the streaming subscription has already delivered content, the
+    // mutation timing out (AppSync's 30s data-source cap) isn't user-visible
+    // — the WebSocket keeps streaming chunks. Don't pollute the chat with an
+    // error in that case.
+    if (accumulatedText) {
+      console.warn("Mutation failed but streaming delivered content; suppressing error UI:", err);
+    } else {
+      if (subscription && typeof subscription.close === "function") {
+        try { subscription.close(); } catch(e) {}
+      }
+      mainChatStream.innerHTML += `
+        <div class="chat-msg-error" style="margin-bottom: 0.5rem;">
+          Failed to fetch AI response: ${err.message}
+        </div>
+      `;
+    }
     mainChatStream.scrollTop = mainChatStream.scrollHeight;
   }
 }
