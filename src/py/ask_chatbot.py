@@ -1409,19 +1409,24 @@ cards with rich callouts and click-to-focus zoom into the diagram. Do NOT put \
 "What's Working", "Issues", or "Suggestions" sections in the markdown — they \
 live only as cards in the JSON.
 
-Schema for each finding:
+Schema for each finding (be RUTHLESSLY concise — these cards are read at a glance):
 
 - `id` — unique string within this response
-- `severity` — `"issue"` (topology problem), `"working"` (correctly drawn), or `"suggestion"` (optional improvement)
-- `service` — service / element name as drawn (e.g. `"API Gateway"`, `"IAM"`, `"Get One Apnt Lambda"`)
-- `title` — short headline (≤10 words)
-- `detail` — 1–2 sentences explaining what's drawn / what you're observing
-- `whyItMatters` — 1–2 sentences on the concrete consequence (optional for `"working"`)
-- `fix` — one concrete change the student can draw (optional for `"working"`)
-- `bbox` — `[x, y, w, h]` normalised to [0.0, 1.0] (optional; include when there's a clear visual location). Pad generously — the highlight is a focus hint, not an outline.
+- `severity` — `"issue"` | `"working"` | `"suggestion"`
+- `service` — service name as drawn (e.g. `"API Gateway"`, `"IAM"`)
+- `title` — ≤8 words, scannable headline
+- `detail` — ONE short sentence describing what's drawn
+- `whyItMatters` — ONE short sentence on the consequence (omit for `"working"`)
+- `fix` — ONE short imperative sentence ("Add a worker Lambda between SQS and DynamoDB.") (omit for `"working"`)
+- `bbox` — `[x, y, w, h]` normalised to [0.0, 1.0] (optional; include when there's a clear visual location). Pad generously.
 
-Keep every text field tight (≤2 sentences). Include EVERY item; do not duplicate \
-content between markdown and JSON.
+Hard limits:
+- `detail`, `whyItMatters`, `fix` are EACH at most ONE sentence, ideally under 20 words. \
+Do not say "Why it matters:" or "Fix:" inside the value — those labels are added by \
+the UI; the value is just the sentence. Do not pad. No marketing prose.
+- `title` must be the issue itself, not a re-statement of the service name.
+
+Include EVERY item; do not duplicate content between markdown and JSON.
 
 Example (illustrative coordinates — do NOT copy them):
 
@@ -1434,17 +1439,17 @@ Example (illustrative coordinates — do NOT copy them):
       "severity": "issue",
       "service": "IAM",
       "title": "IAM drawn as a runtime hop",
-      "detail": "IAM is positioned between Lambda and DynamoDB as if it were a flow node.",
-      "whyItMatters": "It implies a non-existent runtime call. IAM is a permission attached to the Lambda's execution role, not a service the Lambda invokes.",
-      "fix": "Remove the IAM box. Draw Lambda → DynamoDB directly.",
+      "detail": "IAM sits between Lambda and DynamoDB as if it were a flow node.",
+      "whyItMatters": "IAM is a permission attached to the Lambda role, not a service the Lambda invokes.",
+      "fix": "Remove the IAM box; draw Lambda → DynamoDB directly.",
       "bbox": [0.58, 0.32, 0.18, 0.22]
     },
     {
       "id": "api-gw-good",
       "severity": "working",
       "service": "API Gateway",
-      "title": "API Gateway in the right position",
-      "detail": "API Gateway sits between the client and the Lambda layer, which is the standard entry point.",
+      "title": "Entry point correctly placed",
+      "detail": "API Gateway sits between client and Lambdas as expected.",
       "bbox": [0.18, 0.30, 0.10, 0.16]
     }
   ]

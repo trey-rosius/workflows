@@ -286,206 +286,267 @@ function severityColor(s) {
   return '#ef4444';
 }
 
+// Pushes a finished architecture review onto the dedicated detail screen and
+// switches to it. The chat bubble retains the Summary/Next-Steps markdown.
+// While the JSON is still streaming (incomplete), we show a "Reviewing your
+// architecture…" placeholder instead of the raw JSON.
 function renderDiagramFindings(rootEl) {
   if (!rootEl) return;
-  const codeBlocks = rootEl.querySelectorAll('code.language-a2ui-findings');
+  const codeBlocks = rootEl.querySelectorAll("code.language-a2ui-findings");
   if (codeBlocks.length === 0) return;
 
   const diagramDataUrl = diagramDataUrlsByResponseId[rootEl.id];
   if (!diagramDataUrl) return;
 
   codeBlocks.forEach((codeEl) => {
-    const container = codeEl.closest('pre') || codeEl;
-    let payload;
-    try {
-      payload = JSON.parse(codeEl.textContent);
-    } catch (e) {
-      return; // Block may still be streaming — let a later pass handle it.
-    }
-    const findings = (payload && payload.findings) || [];
-    if (findings.length === 0) return;
+    const container = codeEl.closest("pre") || codeEl;
+    let payload, parseOk = false;
+    try { payload = JSON.parse(codeEl.textContent); parseOk = true; } catch (_) {}
+    const findings = parseOk && payload && Array.isArray(payload.findings) ? payload.findings : [];
 
-    const review = document.createElement('div');
-    review.className = 'diag-review';
-    review.innerHTML = `
-      <div class="diag-canvas-toolbar">
-        <span class="diag-canvas-title">Diagram review</span>
-        <button type="button" class="diag-show-full-btn">Show full diagram</button>
-      </div>
-      <div class="diag-canvas-wrap">
-        <img class="diag-canvas-img" alt="">
-        <div class="diag-canvas-highlight"></div>
-      </div>
-      <div class="diag-findings-list"></div>
-    `;
-    const wrap = review.querySelector('.diag-canvas-wrap');
-    const img = review.querySelector('.diag-canvas-img');
-    const highlight = review.querySelector('.diag-canvas-highlight');
-    const list = review.querySelector('.diag-findings-list');
-    const fullBtn = review.querySelector('.diag-show-full-btn');
-
-    container.replaceWith(review);
-
-    let activeFindingId = null;
-    let activeBbox = null;
-    let activeColor = null;
-
-    function resetZoom() {
-      const cw = wrap.clientWidth;
-      const ch = wrap.clientHeight;
-      const nw = img.naturalWidth;
-      const nh = img.naturalHeight;
-      if (!nw || !nh) return;
-      const scale = Math.min(cw / nw, ch / nh);
-      const dw = nw * scale;
-      const dh = nh * scale;
-      img.style.width = `${dw}px`;
-      img.style.height = `${dh}px`;
-      img.style.left = `${(cw - dw) / 2}px`;
-      img.style.top = `${(ch - dh) / 2}px`;
-      highlight.style.display = 'none';
+    if (!parseOk || findings.length === 0) {
+      // Stream still in flight — show the placeholder right after the (hidden) pre.
+      ensureReviewingPlaceholder(container);
+      return;
     }
 
-    function zoomTo(bbox, color) {
-      const cw = wrap.clientWidth;
-      const ch = wrap.clientHeight;
-      const nw = img.naturalWidth;
-      const nh = img.naturalHeight;
-      if (!nw || !nh) return;
-      const bx = Math.max(0, Math.min(1, Number(bbox[0]) || 0));
-      const by = Math.max(0, Math.min(1, Number(bbox[1]) || 0));
-      const bw = Math.max(0.01, Math.min(1 - bx, Number(bbox[2]) || 0.05));
-      const bh = Math.max(0.01, Math.min(1 - by, Number(bbox[3]) || 0.05));
+    // Stream done — drop the placeholder, populate detail, save, swap to CTA.
+    removeReviewingPlaceholder(container);
 
-      // Pad the bbox by 40% on each side so the student sees surrounding context.
-      const padX = bw * 0.4;
-      const padY = bh * 0.4;
-      const fx = Math.max(0, bx - padX);
-      const fy = Math.max(0, by - padY);
-      const fw = Math.min(1 - fx, bw + 2 * padX);
-      const fh = Math.min(1 - fy, bh + 2 * padY);
+    const reviewName = payload.name || defaultReviewName();
+    const savedId = persistReview({ findings, diagramDataUrl, reviewName });
 
-      // Scale so the padded bbox fits the viewport. Clamp the scale so we
-      // never zoom in further than 3.5× the fit-to-container baseline.
-      const baseScale = Math.min(cw / nw, ch / nh);
-      const desiredScale = Math.min(cw / (fw * nw), ch / (fh * nh));
-      const scale = Math.min(desiredScale, baseScale * 3.5);
-      const dw = nw * scale;
-      const dh = nh * scale;
+    populateArchDetail({ findings, diagramDataUrl, reviewName, reviewId: savedId });
 
-      // Centre the bbox in the viewport.
-      const bcxDisp = (bx + bw / 2) * dw;
-      const bcyDisp = (by + bh / 2) * dh;
-      img.style.width = `${dw}px`;
-      img.style.height = `${dh}px`;
-      img.style.left = `${cw / 2 - bcxDisp}px`;
-      img.style.top = `${ch / 2 - bcyDisp}px`;
-
-      // Position the highlight box on top of the image at the bbox.
-      highlight.style.display = 'block';
-      highlight.style.left = `${cw / 2 - bcxDisp + bx * dw}px`;
-      highlight.style.top = `${ch / 2 - bcyDisp + by * dh}px`;
-      highlight.style.width = `${bw * dw}px`;
-      highlight.style.height = `${bh * dh}px`;
-      highlight.style.borderColor = color;
-      highlight.style.boxShadow = `0 0 0 9999px rgba(0, 0, 0, 0.45)`;
+    // Replace the (hidden) JSON code block with a visible "View full review" CTA.
+    if (!container.dataset.replaced) {
+      const cta = document.createElement("button");
+      cta.type = "button";
+      cta.className = "diag-open-review-cta";
+      cta.dataset.reviewId = savedId;
+      cta.innerHTML = `
+        <span class="diag-open-review-icon"><i data-lucide="sparkles"></i></span>
+        <span class="diag-open-review-text">
+          <strong>Architecture review ready</strong>
+          <span>${findings.length} findings across your diagram — open the full review</span>
+        </span>
+        <i data-lucide="arrow-right"></i>
+      `;
+      cta.addEventListener("click", () => openSavedReview(savedId));
+      container.replaceWith(cta);
+      cta.dataset.replaced = "1";
+      if (window.lucide) window.lucide.createIcons();
     }
 
-    img.addEventListener('load', () => {
-      resetZoom();
-      // Keep the layout sane across viewport changes (e.g. mobile↔desktop
-      // when the side-by-side breakpoint kicks in).
+    // Auto-switch to the dedicated screen on first completion.
+    if (!rootEl.dataset.archdetailOpened) {
+      rootEl.dataset.archdetailOpened = "1";
+      switchToEduScreen("archdetail");
+    }
+  });
+}
+
+function ensureReviewingPlaceholder(siblingAfter) {
+  // Look for an existing placeholder right after the (hidden) pre. The chat
+  // wipes innerHTML each chunk, so we re-inject as needed.
+  const parent = siblingAfter.parentNode;
+  if (!parent) return;
+  const existing = parent.querySelector(".diag-reviewing-card");
+  if (existing) return;
+  const card = document.createElement("div");
+  card.className = "diag-reviewing-card";
+  card.innerHTML = `
+    <span class="diag-reviewing-card-spinner"></span>
+    <span class="diag-reviewing-card-text">
+      <strong>Reviewing your architecture…</strong>
+      <span>Mapping findings to your diagram.</span>
+    </span>
+  `;
+  siblingAfter.insertAdjacentElement("afterend", card);
+}
+
+function removeReviewingPlaceholder(siblingAfter) {
+  const parent = siblingAfter.parentNode;
+  if (!parent) return;
+  const existing = parent.querySelector(".diag-reviewing-card");
+  if (existing) existing.remove();
+}
+
+function defaultReviewName() {
+  const now = new Date();
+  const stamp = now.toISOString().slice(11, 16).replace(":", "");
+  return `architecture-review · ${stamp}`;
+}
+
+function populateArchDetail({ findings, diagramDataUrl, reviewName }) {
+  const wrap = document.getElementById("edu-archdetail-canvas");
+  const img = document.getElementById("edu-archdetail-img");
+  const highlight = document.getElementById("edu-archdetail-highlight");
+  const list = document.getElementById("edu-archdetail-list");
+  const summary = document.getElementById("edu-archdetail-summary");
+  const badges = document.getElementById("edu-archdetail-badges");
+  const ring = document.getElementById("edu-archdetail-ring");
+  const subtitleEl = document.getElementById("edu-screen-subtitle");
+  if (!wrap || !img || !list) return;
+
+  // Topbar subtitle reflects the current review.
+  if (subtitleEl) {
+    subtitleEl.textContent = reviewName;
+    subtitleEl.hidden = false;
+  }
+
+  // Severity totals + ring score.
+  const counts = findings.reduce(
+    (a, f) => { a[f.severity] = (a[f.severity] || 0) + 1; return a; },
+    {}
+  );
+  const total = findings.length;
+  const issues = counts.issue || 0;
+  const working = counts.working || 0;
+  // Simple heuristic: score down for issues, up for working items.
+  const score = Math.max(0, Math.min(100, Math.round(70 + working * 4 - issues * 6)));
+  summary.textContent = `${total} findings across ${total} components`;
+
+  const sevBadge = (sev, label, soft, fg) => (counts[sev] || 0) > 0
+    ? `<span class="edu-pill-dot" style="background: ${soft}; color: ${fg};"><i style="background: ${fg};"></i>${counts[sev]} ${label}</span>`
+    : "";
+  badges.innerHTML = [
+    sevBadge("issue", "issues", "var(--danger-soft)", "var(--danger)"),
+    sevBadge("suggestion", "suggestions", "var(--info-soft)", "var(--info)"),
+    sevBadge("working", "working", "var(--success-soft)", "var(--success)"),
+  ].join("");
+
+  // Score ring SVG.
+  const tone = scoreRingTone(score);
+  const r = 18;
+  const c = 2 * Math.PI * r;
+  ring.innerHTML = `
+    <svg width="44" height="44" style="transform: rotate(-90deg);">
+      <circle cx="22" cy="22" r="${r}" fill="none" stroke="var(--ink-150)" stroke-width="4"></circle>
+      <circle cx="22" cy="22" r="${r}" fill="none" stroke="${tone}" stroke-width="4" stroke-linecap="round"
+        stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - score / 100)}"></circle>
+    </svg>
+    <span class="edu-archdetail-rail-ring-num">${score}</span>
+  `;
+
+  // Diagram + click-to-focus zoom state.
+  let activeBbox = null;
+  let activeColor = null;
+  function resetZoom() {
+    const cw = wrap.clientWidth, ch = wrap.clientHeight;
+    const nw = img.naturalWidth, nh = img.naturalHeight;
+    if (!nw || !nh) return;
+    const scale = Math.min(cw / nw, ch / nh);
+    const dw = nw * scale, dh = nh * scale;
+    img.style.width = `${dw}px`; img.style.height = `${dh}px`;
+    img.style.left = `${(cw - dw) / 2}px`; img.style.top = `${(ch - dh) / 2}px`;
+    highlight.style.display = "none";
+  }
+  function zoomTo(bbox, color) {
+    const cw = wrap.clientWidth, ch = wrap.clientHeight;
+    const nw = img.naturalWidth, nh = img.naturalHeight;
+    if (!nw || !nh) return;
+    const bx = Math.max(0, Math.min(1, Number(bbox[0]) || 0));
+    const by = Math.max(0, Math.min(1, Number(bbox[1]) || 0));
+    const bw = Math.max(0.01, Math.min(1 - bx, Number(bbox[2]) || 0.05));
+    const bh = Math.max(0.01, Math.min(1 - by, Number(bbox[3]) || 0.05));
+    const padX = bw * 0.4, padY = bh * 0.4;
+    const fx = Math.max(0, bx - padX), fy = Math.max(0, by - padY);
+    const fw = Math.min(1 - fx, bw + 2 * padX), fh = Math.min(1 - fy, bh + 2 * padY);
+    const baseScale = Math.min(cw / nw, ch / nh);
+    const desiredScale = Math.min(cw / (fw * nw), ch / (fh * nh));
+    const scale = Math.min(desiredScale, baseScale * 3.5);
+    const dw = nw * scale, dh = nh * scale;
+    const bcx = (bx + bw / 2) * dw, bcy = (by + bh / 2) * dh;
+    img.style.width = `${dw}px`; img.style.height = `${dh}px`;
+    img.style.left = `${cw / 2 - bcx}px`; img.style.top = `${ch / 2 - bcy}px`;
+    highlight.style.display = "block";
+    highlight.style.left = `${cw / 2 - bcx + bx * dw}px`;
+    highlight.style.top = `${cw / 2 - bcy + by * dh - (cw - ch) / 2}px`;
+    // Simpler: position highlight relative to image left/top + bbox.
+    highlight.style.left = `${parseFloat(img.style.left) + bx * dw}px`;
+    highlight.style.top = `${parseFloat(img.style.top) + by * dh}px`;
+    highlight.style.width = `${bw * dw}px`;
+    highlight.style.height = `${bh * dh}px`;
+    highlight.style.borderColor = color;
+  }
+
+  img.onload = () => {
+    resetZoom();
+    if (!wrap.__roBound) {
       const ro = new ResizeObserver(() => {
-        if (activeFindingId === null) resetZoom();
-        else if (activeBbox) zoomTo(activeBbox, activeColor);
+        if (!activeBbox) resetZoom();
+        else zoomTo(activeBbox, activeColor);
       });
       ro.observe(wrap);
-    });
-    img.src = diagramDataUrl;
+      wrap.__roBound = true;
+    }
+  };
+  img.src = diagramDataUrl;
 
-    fullBtn.addEventListener('click', () => {
-      activeFindingId = null;
-      activeBbox = null;
-      activeColor = null;
-      list.querySelectorAll('.diag-finding-card').forEach((el) => {
-        el.classList.remove('diag-finding-card-active');
+  // Findings list — same card layout as before (severity pill + detail +
+  // Why/Fix callouts), but rendered into the rail instead of the chat.
+  const severityLabel = (s) => s === "working" ? "Working" : s === "suggestion" ? "Suggestion" : "Issue";
+  const severityIcon = (s) => s === "working" ? "✓" : s === "suggestion" ? "💡" : "⚠";
+
+  list.innerHTML = "";
+  findings.forEach((f, idx) => {
+    const num = idx + 1;
+    const color = severityColor(f.severity);
+    const hasBbox = Array.isArray(f.bbox) && f.bbox.length === 4;
+    const card = document.createElement(hasBbox ? "button" : "div");
+    if (hasBbox) card.type = "button";
+    card.className = `diag-finding-card diag-finding-${f.severity || "issue"}`;
+    if (!hasBbox) card.classList.add("diag-finding-card-static");
+    card.innerHTML = `
+      <div class="diag-finding-header">
+        <span class="diag-finding-num"></span>
+        <div class="diag-finding-titleblock">
+          <span class="diag-finding-badge"></span>
+          <span class="diag-finding-title"></span>
+        </div>
+      </div>
+      <div class="diag-finding-detail"></div>
+      <div class="diag-finding-callout diag-finding-why" style="display: none;">
+        <span class="diag-finding-callout-label">Why it matters</span>
+        <span class="diag-finding-callout-text"></span>
+      </div>
+      <div class="diag-finding-callout diag-finding-fix" style="display: none;">
+        <span class="diag-finding-callout-label">Fix</span>
+        <span class="diag-finding-callout-text"></span>
+      </div>
+    `;
+    const numEl = card.querySelector(".diag-finding-num");
+    numEl.textContent = String(num);
+    numEl.style.background = color;
+    const badgeEl = card.querySelector(".diag-finding-badge");
+    badgeEl.textContent = `${severityIcon(f.severity)} ${severityLabel(f.severity)}`;
+    badgeEl.style.color = color;
+    badgeEl.style.borderColor = color;
+    const titleText = (f.service ? `${f.service} — ` : "") + (f.title || "");
+    card.querySelector(".diag-finding-title").textContent = titleText;
+    card.querySelector(".diag-finding-detail").textContent = f.detail || "";
+
+    if (f.whyItMatters) {
+      const why = card.querySelector(".diag-finding-why");
+      why.style.display = "";
+      why.querySelector(".diag-finding-callout-text").textContent = f.whyItMatters;
+    }
+    if (f.fix) {
+      const fix = card.querySelector(".diag-finding-fix");
+      fix.style.display = "";
+      fix.querySelector(".diag-finding-callout-text").textContent = f.fix;
+    }
+    if (hasBbox) {
+      card.addEventListener("click", () => {
+        list.querySelectorAll(".diag-finding-card").forEach((el) => el.classList.remove("diag-finding-card-active"));
+        card.classList.add("diag-finding-card-active");
+        activeBbox = f.bbox;
+        activeColor = color;
+        zoomTo(activeBbox, color);
       });
-      resetZoom();
-    });
-
-    const severityLabel = (s) => (
-      s === 'working' ? 'Working' :
-      s === 'suggestion' ? 'Suggestion' :
-      'Issue'
-    );
-    const severityIcon = (s) => (
-      s === 'working' ? '✓' :
-      s === 'suggestion' ? '💡' :
-      '⚠'
-    );
-
-    findings.forEach((f, idx) => {
-      const num = idx + 1;
-      const color = severityColor(f.severity);
-      const hasBbox = Array.isArray(f.bbox) && f.bbox.length === 4;
-      const card = document.createElement(hasBbox ? 'button' : 'div');
-      if (hasBbox) card.type = 'button';
-      card.className = `diag-finding-card diag-finding-${f.severity || 'issue'}`;
-      if (!hasBbox) card.classList.add('diag-finding-card-static');
-      card.innerHTML = `
-        <div class="diag-finding-header">
-          <span class="diag-finding-num"></span>
-          <div class="diag-finding-titleblock">
-            <span class="diag-finding-badge"></span>
-            <span class="diag-finding-title"></span>
-          </div>
-        </div>
-        <div class="diag-finding-detail"></div>
-        <div class="diag-finding-callout diag-finding-why" style="display: none;">
-          <span class="diag-finding-callout-label">Why it matters</span>
-          <span class="diag-finding-callout-text"></span>
-        </div>
-        <div class="diag-finding-callout diag-finding-fix" style="display: none;">
-          <span class="diag-finding-callout-label">Fix</span>
-          <span class="diag-finding-callout-text"></span>
-        </div>
-      `;
-      const numEl = card.querySelector('.diag-finding-num');
-      numEl.textContent = String(num);
-      numEl.style.background = color;
-      const badgeEl = card.querySelector('.diag-finding-badge');
-      badgeEl.textContent = `${severityIcon(f.severity)} ${severityLabel(f.severity)}`;
-      badgeEl.style.color = color;
-      badgeEl.style.borderColor = color;
-      const titleText = (f.service ? `${f.service} — ` : '') + (f.title || '');
-      card.querySelector('.diag-finding-title').textContent = titleText;
-      card.querySelector('.diag-finding-detail').textContent = f.detail || '';
-
-      if (f.whyItMatters) {
-        const why = card.querySelector('.diag-finding-why');
-        why.style.display = '';
-        why.querySelector('.diag-finding-callout-text').textContent = f.whyItMatters;
-      }
-      if (f.fix) {
-        const fix = card.querySelector('.diag-finding-fix');
-        fix.style.display = '';
-        fix.querySelector('.diag-finding-callout-text').textContent = f.fix;
-      }
-
-      if (hasBbox) {
-        card.addEventListener('click', () => {
-          activeFindingId = f.id || `idx-${idx}`;
-          activeBbox = f.bbox;
-          activeColor = color;
-          list.querySelectorAll('.diag-finding-card').forEach((el) => {
-            el.classList.remove('diag-finding-card-active');
-          });
-          card.classList.add('diag-finding-card-active');
-          zoomTo(activeBbox, color);
-        });
-      }
-      list.appendChild(card);
-    });
+    }
+    list.appendChild(card);
   });
 }
 
@@ -3669,4 +3730,658 @@ document.addEventListener("click", (e) => {
 document.addEventListener("DOMContentLoaded", () => {
   switchToChat();
   loadCourses();
+  initEduChromeWiring();
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EduCloud design-system chrome wiring (theme toggle, lucide icons, suggestion
+// cards, new-chat button). Runs once on DOMContentLoaded.
+// ─────────────────────────────────────────────────────────────────────────────
+function initEduChromeWiring() {
+  // Render all <i data-lucide="..."> placeholders.
+  if (window.lucide && typeof window.lucide.createIcons === "function") {
+    window.lucide.createIcons();
+  }
+
+  // Theme toggle — persists in localStorage; flips data-theme on <html>.
+  const themeBtn = document.getElementById("btn-theme-toggle");
+  const applyTheme = (dark) => {
+    document.documentElement.dataset.theme = dark ? "dark" : "light";
+    try { localStorage.setItem("edu-theme", dark ? "dark" : "light"); } catch (e) {}
+    if (themeBtn) {
+      themeBtn.innerHTML = `<i data-lucide="${dark ? "sun" : "moon"}"></i>`;
+      if (window.lucide) window.lucide.createIcons();
+    }
+  };
+  let storedDark = false;
+  try { storedDark = localStorage.getItem("edu-theme") === "dark"; } catch (e) {}
+  applyTheme(storedDark);
+  if (themeBtn) {
+    themeBtn.addEventListener("click", () => {
+      const isDark = document.documentElement.dataset.theme === "dark";
+      applyTheme(!isDark);
+      if (window.lucide) window.lucide.createIcons();
+    });
+  }
+
+  // "+ New chat" button in the topbar — same behaviour as the legacy sidebar one.
+  const btnNewChatTop = document.getElementById("btn-new-chat-top");
+  if (btnNewChatTop) btnNewChatTop.addEventListener("click", resetTutorChat);
+
+  // "Review my work" suggestion card → switch to the Architecture Reviews screen
+  // AND auto-open the diagram file picker so the student can upload immediately.
+  const reviewWorkBtn = document.getElementById("suggestion-review-work");
+  if (reviewWorkBtn) {
+    reviewWorkBtn.addEventListener("click", () => {
+      switchToEduScreen("archreview");
+      const input = document.getElementById("diagram-file-input");
+      if (input) setTimeout(() => input.click(), 180);
+    });
+  }
+
+  // "Back to chat" topbar button.
+  const backToChatBtn = document.getElementById("btn-back-to-chat-top");
+  if (backToChatBtn) backToChatBtn.addEventListener("click", () => switchToEduScreen("chat"));
+
+  // Dropzone on the Architecture Reviews screen → triggers the existing
+  // diagram file input (same upload flow as the inline "Review diagram" button).
+  const dropzone = document.getElementById("edu-archreview-dropzone");
+  const diagFileInput = document.getElementById("diagram-file-input");
+  if (dropzone && diagFileInput) {
+    dropzone.addEventListener("click", () => diagFileInput.click());
+    dropzone.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); diagFileInput.click(); }
+    });
+    dropzone.addEventListener("dragover", (e) => { e.preventDefault(); dropzone.classList.add("edu-archreview-dropzone--drag"); });
+    dropzone.addEventListener("dragleave", () => dropzone.classList.remove("edu-archreview-dropzone--drag"));
+    dropzone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      dropzone.classList.remove("edu-archreview-dropzone--drag");
+      const file = e.dataTransfer.files && e.dataTransfer.files[0];
+      if (file && /^image\/(png|jpe?g)$/i.test(file.type)) {
+        // Hand the file to the existing diagram-file-input change handler.
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        diagFileInput.files = dt.files;
+        diagFileInput.dispatchEvent(new Event("change"));
+      }
+    });
+  }
+
+  // After the diagram upload chip lands, the user can hit "send" in the chat
+  // composer. Switch them back to chat so they see the review stream in.
+  if (diagFileInput) {
+    diagFileInput.addEventListener("change", () => {
+      // Only switch if we're currently on the archreview screen.
+      const archEl = document.getElementById("archreview-workspace-container");
+      if (archEl && !archEl.classList.contains("hidden")) {
+        setTimeout(() => switchToEduScreen("chat"), 100);
+      }
+    });
+  }
+
+  renderArchReviewGrid();
+
+  // Back-to-list button on the detail screen.
+  const backFromDetail = document.getElementById("btn-archdetail-back");
+  if (backFromDetail) backFromDetail.addEventListener("click", () => switchToEduScreen("archreview"));
+
+  // Wire EduCloud screen switching from sidebar nav buttons (data-screen attr).
+  document.querySelectorAll(".edu-nav-item[data-screen]").forEach((btn) => {
+    btn.addEventListener("click", () => switchToEduScreen(btn.dataset.screen));
+  });
+
+  // Wire home-screen jump tiles.
+  document.querySelectorAll("[data-jump]").forEach((el) => {
+    el.addEventListener("click", () => switchToEduScreen(el.dataset.jump));
+  });
+
+  // Chip filter wiring for Communities + Services screens.
+  document.querySelectorAll(".edu-chip-row").forEach((row) => {
+    row.addEventListener("click", (e) => {
+      const chip = e.target.closest(".edu-chip");
+      if (!chip || !row.contains(chip)) return;
+      row.querySelectorAll(".edu-chip").forEach((c) => c.classList.remove("edu-chip--active"));
+      chip.classList.add("edu-chip--active");
+      const group = row.dataset.chipGroup;
+      const filter = chip.dataset.filter || "all";
+      if (group === "community") renderCommunityGrid(filter);
+      else if (group === "services") renderServicesTable(filter, document.getElementById("edu-services-search")?.value || "");
+    });
+  });
+  const servicesSearch = document.getElementById("edu-services-search");
+  if (servicesSearch) {
+    servicesSearch.addEventListener("input", () => {
+      const activeChip = document.querySelector('[data-chip-group="services"] .edu-chip--active');
+      renderServicesTable(activeChip?.dataset.filter || "all", servicesSearch.value);
+    });
+  }
+
+  // Initial renders for the new screens.
+  renderCommunityGrid("all");
+  renderServicesTable("all", "");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EduCloud screen routing — drives topbar title + which workspace is visible.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const EDU_SCREENS = {
+  home: {
+    title: "Home",
+    subtitle: "Your learning, in one place",
+    container: "home-workspace-container",
+    showNewChat: false,
+  },
+  chat: {
+    title: "AI Tutor",
+    subtitle: null,
+    container: "chat-workspace-container",
+    showNewChat: true,
+  },
+  archreview: {
+    title: "Architecture reviews",
+    subtitle: "AI reviews of your cloud architectures",
+    container: "archreview-workspace-container",
+    showNewChat: false,
+    showBackToChat: true,
+  },
+  archdetail: {
+    title: "Architecture review",
+    subtitle: null, // set dynamically in renderArchDetail
+    container: "archreview-detail-workspace-container",
+    showNewChat: false,
+    showBackToChat: true,
+  },
+  library: {
+    title: "Course Library",
+    subtitle: null,
+    container: "courses-workspace-container",
+    showNewChat: false,
+  },
+  community: {
+    title: "Communities",
+    subtitle: "Find your people and learn together",
+    container: "community-workspace-container",
+    showNewChat: false,
+  },
+  services: {
+    title: "Cloud Services Map",
+    subtitle: "The same concept, named across AWS, Azure, Google Cloud and Oracle",
+    container: "services-workspace-container",
+    showNewChat: false,
+  },
+  achievements: {
+    title: "Achievements",
+    subtitle: null,
+    container: "achievements-workspace-container",
+    showNewChat: false,
+  },
+  activity: {
+    title: "Activity",
+    subtitle: null,
+    container: "activity-workspace-container",
+    showNewChat: false,
+  },
+  profile: {
+    title: "Profile",
+    subtitle: null,
+    container: "profile-workspace-container",
+    showNewChat: false,
+  },
+  explore: {
+    title: "Explore",
+    subtitle: null,
+    container: "explore-workspace-container",
+    showNewChat: false,
+  },
+  // Legacy / admin screens — accessible but absent from the primary nav.
+  telemetry: { title: "Telemetry", subtitle: null, container: "telemetry-workspace-container", showNewChat: false },
+  demand: { title: "Content demand", subtitle: null, container: "demand-workspace-container", showNewChat: false },
+  analyzer: { title: "Video Analyzer", subtitle: null, container: "analyzer-workspace-container", showNewChat: false },
+};
+
+function switchToEduScreen(screen) {
+  const spec = EDU_SCREENS[screen];
+  if (!spec) return;
+
+  // Hide every known workspace, show the chosen one.
+  Object.values(EDU_SCREENS).forEach((s) => {
+    const el = document.getElementById(s.container);
+    if (el) el.classList.add("hidden");
+  });
+  const showEl = document.getElementById(spec.container);
+  if (showEl) showEl.classList.remove("hidden");
+
+  // Sync nav highlight.
+  document.querySelectorAll(".edu-nav-item[data-screen]").forEach((b) => {
+    b.classList.toggle("active", b.dataset.screen === screen);
+  });
+
+  // Topbar.
+  const titleEl = document.getElementById("edu-screen-title");
+  const subEl = document.getElementById("edu-screen-subtitle");
+  if (titleEl) titleEl.textContent = spec.title;
+  if (subEl) {
+    if (spec.subtitle) { subEl.textContent = spec.subtitle; subEl.hidden = false; }
+    else { subEl.hidden = true; subEl.textContent = ""; }
+  }
+  const newChatBtn = document.getElementById("btn-new-chat-top");
+  if (newChatBtn) newChatBtn.hidden = !spec.showNewChat;
+  const backToChatBtn = document.getElementById("btn-back-to-chat-top");
+  if (backToChatBtn) backToChatBtn.hidden = !spec.showBackToChat;
+
+  // Side-effects for screens that need data fetching.
+  if (screen === "library" && typeof loadCourses === "function") loadCourses();
+  if (screen === "telemetry" && typeof loadTelemetryLogs === "function") loadTelemetryLogs();
+  if (screen === "demand" && typeof loadDemandLogs === "function") loadDemandLogs();
+
+  // Mobile sidebar close.
+  if (window.innerWidth <= 768 && typeof window.closeMobileSidebar === "function") {
+    window.closeMobileSidebar();
+  }
+
+  if (window.lucide) window.lucide.createIcons();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Communities screen — static data + grid renderer.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const EDU_COMMUNITIES = [
+  { id: "aws-serverless", name: "AWS Serverless", cat: "AWS", desc: "Lambda, API Gateway & DynamoDB — ship serverless apps with weekly build-alongs.", members: "12.5k", online: "312", joined: true, accent: "var(--pink-500)", icon: "cloud", cover: "linear-gradient(135deg, #f5d6e2 0%, #e8b8c8 100%)" },
+  { id: "gen-ai", name: "Generative AI Builders", cat: "AI/ML", desc: "Bedrock, agents & RAG — design and deploy AI applications together.", members: "9.8k", online: "404", joined: false, accent: "var(--orange-500)", icon: "sparkles", cover: "linear-gradient(135deg, #f7c89a 0%, #f49462 100%)" },
+  { id: "data-eng", name: "Data Engineering", cat: "Data", desc: "Pipelines, lakehouses and analytics on AWS, Snowflake & Databricks.", members: "15.2k", online: "540", joined: false, accent: "var(--coral-500)", icon: "database", cover: "linear-gradient(135deg, #c8a8e8 0%, #9c7fc4 100%)" },
+  { id: "azure-cloud", name: "Azure Cloud", cat: "Azure", desc: "From App Service to AKS — hands-on Azure architecture and labs.", members: "6.3k", online: "122", joined: false, accent: "#3b82f6", icon: "cloud", cover: "linear-gradient(135deg, #c5d4e8 0%, #8aa8cc 100%)" },
+  { id: "cloud-certs", name: "Cloud Certified", cat: "Certs", desc: "Study groups & mock exams for AWS, Azure and GCP certifications.", members: "18.7k", online: "388", joined: false, accent: "#22c55e", icon: "badge-check", cover: "linear-gradient(135deg, #b8e0c8 0%, #82c49c 100%)" },
+  { id: "devops", name: "DevOps & Platform", cat: "DevOps", desc: "CI/CD, Kubernetes and IaC — automate everything, together.", members: "7.9k", online: "161", joined: false, accent: "#f59e0b", icon: "git-branch", cover: "linear-gradient(135deg, #d4c2a8 0%, #a89070 100%)" },
+];
+
+function renderCommunityGrid(filter) {
+  const grid = document.getElementById("edu-community-grid");
+  if (!grid) return;
+  const filtered = filter === "all" ? EDU_COMMUNITIES : EDU_COMMUNITIES.filter((c) => c.cat === filter);
+  grid.innerHTML = filtered.map((c) => `
+    <article class="edu-community-card" data-id="${c.id}">
+      <div class="edu-community-card-cover" style="background: ${c.cover};">
+        <span class="edu-community-card-tag">${c.cat}</span>
+        <span class="edu-community-card-icon" style="color: ${c.accent};"><i data-lucide="${c.icon}"></i></span>
+      </div>
+      <div class="edu-community-card-body">
+        <h3 class="edu-community-card-name">${c.name}</h3>
+        <p class="edu-community-card-desc">${c.desc}</p>
+        <div class="edu-community-card-foot">
+          <div class="edu-community-card-stats">
+            <span class="edu-avatar-stack">
+              <img src="https://i.pravatar.cc/40?img=11" alt="">
+              <img src="https://i.pravatar.cc/40?img=12" alt="">
+              <img src="https://i.pravatar.cc/40?img=13" alt="">
+            </span>
+            <div class="edu-community-card-counts">
+              <span><strong>${c.members}</strong> members</span>
+              <span class="edu-community-card-online"><i class="edu-dot" style="background: var(--success);"></i>${c.online} online</span>
+            </div>
+          </div>
+          ${c.joined
+            ? `<button class="edu-btn edu-btn--joined"><i data-lucide="check"></i><span>Joined</span></button>`
+            : `<button class="edu-btn edu-btn--primary edu-btn--sm">Join</button>`}
+        </div>
+      </div>
+    </article>
+  `).join("");
+  if (window.lucide) window.lucide.createIcons();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cloud Services Map — static comparison catalog + table renderer.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const EDU_SERVICE_CATALOG = [
+  { cat: "Compute", icon: "server", rows: [
+    { concept: "Virtual machines", desc: "Resizable compute servers",
+      aws: ["Amazon EC2", "Elastic Compute Cloud"], azure: ["Virtual Machines", "Azure VMs"], gcp: ["Compute Engine", "GCE instances"], oracle: ["OCI Compute", "Bare metal & VMs"] },
+    { concept: "Serverless functions", desc: "Run code, no servers to manage",
+      aws: ["AWS Lambda", "Event-driven functions"], azure: ["Azure Functions", "Event-driven"], gcp: ["Cloud Functions", "Event-driven"], oracle: ["OCI Functions", "Fn Project"] },
+    { concept: "Managed app hosting", desc: "Deploy apps without infra",
+      aws: ["Elastic Beanstalk", "Managed platform"], azure: ["App Service", "Managed web apps"], gcp: ["App Engine", "Managed platform"], oracle: null },
+  ]},
+  { cat: "Storage", icon: "hard-drive", rows: [
+    { concept: "Object storage", desc: "Buckets of unstructured data",
+      aws: ["Amazon S3", "Simple Storage Service"], azure: ["Blob Storage", "Containers & blobs"], gcp: ["Cloud Storage", "Buckets"], oracle: ["OCI Object Storage", "Buckets"] },
+    { concept: "Block storage", desc: "Disks attached to VMs",
+      aws: ["Amazon EBS", "Elastic Block Store"], azure: ["Managed Disks", "VM disks"], gcp: ["Persistent Disk", "Durable volumes"], oracle: ["Block Volumes", "Durable disks"] },
+    { concept: "File storage", desc: "Shared NFS/SMB volumes",
+      aws: ["Amazon EFS", "Elastic File System"], azure: ["Azure Files", "Managed SMB/NFS"], gcp: ["Filestore", "Managed NFS"], oracle: ["File Storage", "Shared NFS"] },
+  ]},
+  { cat: "Databases", icon: "database", rows: [
+    { concept: "Managed relational DB", desc: "PostgreSQL, MySQL, SQL Server",
+      aws: ["Amazon RDS", "Managed SQL"], azure: ["SQL Database", "Managed SQL"], gcp: ["Cloud SQL", "Managed SQL"], oracle: ["MySQL HeatWave", "Managed MySQL"] },
+    { concept: "Key-value / NoSQL", desc: "Single-digit ms key lookups",
+      aws: ["DynamoDB", "Managed NoSQL"], azure: ["Cosmos DB", "Multi-model"], gcp: ["Firestore / Bigtable", "NoSQL"], oracle: ["NoSQL Database", "Managed K/V"] },
+    { concept: "Data warehouse", desc: "Petabyte-scale analytics",
+      aws: ["Amazon Redshift", "MPP warehouse"], azure: ["Synapse Analytics", "MPP warehouse"], gcp: ["BigQuery", "Serverless warehouse"], oracle: ["Autonomous Data Warehouse", "Self-tuning"] },
+  ]},
+  { cat: "Containers", icon: "container", rows: [
+    { concept: "Managed Kubernetes", desc: "K8s without the toil",
+      aws: ["Amazon EKS", "Managed Kubernetes"], azure: ["AKS", "Managed Kubernetes"], gcp: ["GKE", "Managed Kubernetes"], oracle: ["OKE", "Managed Kubernetes"] },
+    { concept: "Container runtime", desc: "Run containers without K8s",
+      aws: ["Amazon ECS / Fargate", "Container scheduler"], azure: ["Container Apps", "Serverless containers"], gcp: ["Cloud Run", "Serverless containers"], oracle: ["Container Instances", "Quick containers"] },
+  ]},
+  { cat: "Networking", icon: "network", rows: [
+    { concept: "Virtual network", desc: "Isolated cloud network",
+      aws: ["VPC", "Virtual Private Cloud"], azure: ["VNet", "Virtual Network"], gcp: ["VPC", "Virtual Private Cloud"], oracle: ["VCN", "Virtual Cloud Network"] },
+    { concept: "Content delivery", desc: "Edge cache & DDoS",
+      aws: ["CloudFront", "Global CDN"], azure: ["Azure Front Door", "Global CDN"], gcp: ["Cloud CDN", "Global CDN"], oracle: null },
+    { concept: "DNS", desc: "Authoritative DNS hosting",
+      aws: ["Route 53", "DNS + health checks"], azure: ["Azure DNS", "Managed DNS"], gcp: ["Cloud DNS", "Managed DNS"], oracle: ["DNS Service", "Managed DNS"] },
+  ]},
+  { cat: "AI & ML", icon: "sparkles", rows: [
+    { concept: "Foundation models", desc: "Hosted LLM APIs",
+      aws: ["Amazon Bedrock", "Claude, Nova, Llama"], azure: ["Azure OpenAI", "GPT, o-series"], gcp: ["Vertex AI", "Gemini, partner models"], oracle: ["Generative AI", "Cohere, Llama"] },
+    { concept: "ML platform", desc: "Train & deploy custom models",
+      aws: ["SageMaker", "End-to-end ML"], azure: ["Azure ML", "End-to-end ML"], gcp: ["Vertex AI", "End-to-end ML"], oracle: ["Data Science", "ML notebooks + jobs"] },
+    { concept: "Speech & vision APIs", desc: "Pretrained AI services",
+      aws: ["Transcribe / Rekognition", "Speech + vision"], azure: ["Cognitive Services", "Speech + vision"], gcp: ["Speech-to-Text / Vision", "Speech + vision"], oracle: ["Speech / Vision", "Speech + vision"] },
+  ]},
+  { cat: "Security & Identity", icon: "shield", rows: [
+    { concept: "Identity & access", desc: "Users, roles, policies",
+      aws: ["AWS IAM", "Identity + Access"], azure: ["Entra ID", "Identity + Access"], gcp: ["Cloud IAM", "Identity + Access"], oracle: ["OCI IAM", "Identity + Access"] },
+    { concept: "Secrets management", desc: "Rotate & retrieve secrets",
+      aws: ["Secrets Manager", "Managed secrets"], azure: ["Key Vault", "Managed secrets + keys"], gcp: ["Secret Manager", "Managed secrets"], oracle: ["Vault", "Managed secrets + keys"] },
+    { concept: "Web app firewall", desc: "Block injection & abuse",
+      aws: ["AWS WAF", "Edge WAF"], azure: ["Azure WAF", "Edge WAF"], gcp: ["Cloud Armor", "Edge WAF"], oracle: ["WAF", "Edge WAF"] },
+  ]},
+  { cat: "Management & Ops", icon: "settings", rows: [
+    { concept: "Logs & metrics", desc: "Centralised observability",
+      aws: ["CloudWatch", "Logs + metrics"], azure: ["Azure Monitor", "Logs + metrics"], gcp: ["Cloud Monitoring", "Logs + metrics"], oracle: ["OCI Monitoring", "Logs + metrics"] },
+    { concept: "Infrastructure as code", desc: "Define infra in code",
+      aws: ["CloudFormation / CDK", "Native IaC"], azure: ["ARM / Bicep", "Native IaC"], gcp: ["Deployment Manager", "Native IaC"], oracle: ["Resource Manager", "Terraform-based"] },
+  ]},
+  { cat: "Integration", icon: "git-merge", rows: [
+    { concept: "Async messaging", desc: "Queues for decoupled workers",
+      aws: ["Amazon SQS", "Managed queue"], azure: ["Service Bus / Queues", "Managed queue"], gcp: ["Pub/Sub", "Managed pub/sub"], oracle: ["Queue", "Managed queue"] },
+    { concept: "Event bus", desc: "Route events between services",
+      aws: ["EventBridge", "Event bus + schedules"], azure: ["Event Grid", "Event bus"], gcp: ["Eventarc", "Event bus"], oracle: ["Events Service", "Event bus"] },
+    { concept: "API gateway", desc: "Front-door for APIs",
+      aws: ["API Gateway", "REST + WebSocket"], azure: ["API Management", "REST + GraphQL"], gcp: ["API Gateway", "REST + gRPC"], oracle: ["API Gateway", "REST + WebSocket"] },
+  ]},
+];
+
+function renderServicesTable(filter, query) {
+  const body = document.getElementById("edu-services-body");
+  if (!body) return;
+  const q = (query || "").trim().toLowerCase();
+  const matchRow = (row) => {
+    if (!q) return true;
+    const hay = [
+      row.concept, row.desc,
+      ...["aws", "azure", "gcp", "oracle"].flatMap((k) => row[k] || []),
+    ].filter(Boolean).join(" ").toLowerCase();
+    return hay.includes(q);
+  };
+  const sections = EDU_SERVICE_CATALOG
+    .filter((s) => filter === "all" || s.cat === filter)
+    .map((sec) => {
+      const rows = sec.rows.filter(matchRow);
+      if (rows.length === 0) return "";
+      return `
+        <section class="edu-services-section">
+          <header class="edu-services-section-header">
+            <span class="edu-services-section-icon"><i data-lucide="${sec.icon}"></i></span>
+            <h3>${sec.cat}</h3>
+            <span class="edu-services-section-count">${rows.length}</span>
+          </header>
+          <div class="edu-services-rows">
+            ${rows.map((r) => `
+              <div class="edu-services-row">
+                <div class="edu-services-row-concept">
+                  <strong>${r.concept}</strong>
+                  <span>${r.desc}</span>
+                </div>
+                ${renderProviderCell("aws", r.aws, "var(--orange-500)")}
+                ${renderProviderCell("azure", r.azure, "#3b82f6")}
+                ${renderProviderCell("gcp", r.gcp, "var(--success)")}
+                ${renderProviderCell("oracle", r.oracle, "var(--danger)")}
+              </div>
+            `).join("")}
+          </div>
+        </section>
+      `;
+    }).join("");
+  body.innerHTML = sections || `<div class="edu-services-empty">No services match that filter.</div>`;
+
+  // Update the total count pill in the legend.
+  const total = EDU_SERVICE_CATALOG.reduce((n, s) => n + s.rows.length, 0);
+  const countEl = document.getElementById("edu-services-count");
+  if (countEl) countEl.textContent = `${total} service types`;
+
+  if (window.lucide) window.lucide.createIcons();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Architecture Reviews — list screen: dropzone + previous-reviews grid.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Saved reviews — localStorage-backed history.
+// ─────────────────────────────────────────────────────────────────────────────
+const EDU_SAVED_REVIEWS_KEY = "edu_saved_reviews_v1";
+const EDU_SAVED_REVIEWS_MAX = 8;
+
+function loadSavedReviews() {
+  try {
+    const raw = localStorage.getItem(EDU_SAVED_REVIEWS_KEY);
+    if (!raw) return [];
+    const list = JSON.parse(raw);
+    return Array.isArray(list) ? list : [];
+  } catch (_) { return []; }
+}
+
+function writeSavedReviews(list) {
+  try {
+    localStorage.setItem(EDU_SAVED_REVIEWS_KEY, JSON.stringify(list.slice(0, EDU_SAVED_REVIEWS_MAX)));
+  } catch (_) {
+    // localStorage quota exceeded — drop the oldest entries until it fits.
+    while (list.length > 1) {
+      list.pop();
+      try {
+        localStorage.setItem(EDU_SAVED_REVIEWS_KEY, JSON.stringify(list));
+        return;
+      } catch (_) {}
+    }
+  }
+}
+
+function persistReview({ findings, diagramDataUrl, reviewName }) {
+  // De-dup: if a recent review (last 60s) has identical findings count and the
+  // same name, reuse it. Prevents the same review being saved every chunk.
+  const list = loadSavedReviews();
+  const now = Date.now();
+  const fingerprint = `${reviewName}::${findings.length}`;
+  const recent = list.find((r) => r.fingerprint === fingerprint && now - r.ts < 60_000);
+  if (recent) return recent.id;
+
+  const counts = findings.reduce(
+    (a, f) => { a[f.severity] = (a[f.severity] || 0) + 1; return a; },
+    {}
+  );
+  const issues = counts.issue || 0;
+  const working = counts.working || 0;
+  const score = Math.max(0, Math.min(100, Math.round(70 + working * 4 - issues * 6)));
+
+  const id = "saved-" + now;
+  const review = {
+    id, ts: now, fingerprint,
+    name: reviewName,
+    when: humanWhen(now),
+    components: findings.length,
+    score,
+    counts: { high: issues, medium: counts.suggestion || 0, low: counts.working || 0 },
+    findings,
+    diagramDataUrl: null, // filled in asynchronously below
+  };
+  list.unshift(review);
+  writeSavedReviews(list);
+
+  // Downscale the diagram in the background; store the smaller version once
+  // ready (the detail screen meanwhile uses the in-memory full-resolution URL).
+  downscaleDataUrl(diagramDataUrl, 900).then((small) => {
+    const cur = loadSavedReviews();
+    const idx = cur.findIndex((r) => r.id === id);
+    if (idx < 0) return;
+    cur[idx].diagramDataUrl = small;
+    writeSavedReviews(cur);
+    renderArchReviewGrid();
+  });
+
+  return id;
+}
+
+function downscaleDataUrl(dataUrl, maxW) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const scale = Math.min(1, maxW / img.naturalWidth);
+        const w = Math.round(img.naturalWidth * scale);
+        const h = Math.round(img.naturalHeight * scale);
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL("image/jpeg", 0.82));
+      } catch (_) { resolve(dataUrl); }
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
+function humanWhen(ts) {
+  const now = new Date();
+  const d = new Date(ts);
+  const sameDay = d.toDateString() === now.toDateString();
+  const t = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  if (sameDay) return `Today · ${t}`;
+  const yesterday = new Date(now.getTime() - 24 * 3600 * 1000);
+  if (d.toDateString() === yesterday.toDateString()) return `Yesterday · ${t}`;
+  return `${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })} · ${t}`;
+}
+
+function openSavedReview(reviewId) {
+  const list = loadSavedReviews();
+  const r = list.find((x) => x.id === reviewId);
+  if (!r) return;
+  populateArchDetail({
+    findings: r.findings,
+    diagramDataUrl: r.diagramDataUrl,
+    reviewName: r.name,
+    reviewId: r.id,
+  });
+  switchToEduScreen("archdetail");
+}
+
+const EDU_ARCH_REVIEWS = [
+  {
+    id: "multi-agent",
+    name: "multi-agent-orchestration · v1",
+    cover: "linear-gradient(135deg, #f3eee9 0%, #e6ddd0 100%)",
+    score: 74,
+    when: "Today · 2:14 PM",
+    components: 9,
+    counts: { high: 2, medium: 4, low: 1 },
+  },
+  {
+    id: "serverless-appts",
+    name: "serverless-appointments · v2",
+    cover: "#141210",
+    score: 72,
+    when: "Jun 12 · 9:03 AM",
+    components: 7,
+    counts: { high: 2, medium: 3, low: 1 },
+  },
+];
+
+function scoreRingTone(score) {
+  if (score >= 80) return "var(--success)";
+  if (score >= 60) return "var(--amber-500)";
+  return "var(--danger)";
+}
+
+function renderArchReviewGrid() {
+  const grid = document.getElementById("edu-archreview-grid");
+  if (!grid) return;
+  // Saved reviews first (newest first), then the demo seeds.
+  const saved = loadSavedReviews().map((r) => ({
+    id: r.id,
+    name: r.name,
+    // Use single quotes inside url(...) so the surrounding double-quoted
+    // style="" attribute doesn't get truncated by data: URL commas/semicolons.
+    cover: r.diagramDataUrl ? `center / cover no-repeat url('${r.diagramDataUrl}')` : "var(--ink-100)",
+    score: r.score,
+    when: r.when,
+    components: r.components,
+    counts: r.counts,
+    saved: true,
+  }));
+  const items = [...saved, ...EDU_ARCH_REVIEWS];
+  const countEl = document.getElementById("edu-archreview-count");
+  if (countEl) countEl.textContent = `${items.length} review${items.length === 1 ? "" : "s"}`;
+  grid.innerHTML = items.map((r) => {
+    const tone = scoreRingTone(r.score);
+    const dash = 2 * Math.PI * 18;
+    const offset = dash * (1 - r.score / 100);
+    return `
+      <article class="edu-archreview-card" data-id="${r.id}" data-saved="${r.saved ? "1" : ""}" role="button" tabindex="0">
+        <div class="edu-archreview-card-cover" style="background: ${r.cover};">
+          <span class="edu-archreview-card-status">Complete</span>
+          <span class="edu-archreview-card-score">
+            <svg width="44" height="44" style="transform: rotate(-90deg);">
+              <circle cx="22" cy="22" r="18" fill="none" stroke="var(--ink-150)" stroke-width="4"></circle>
+              <circle cx="22" cy="22" r="18" fill="none" stroke="${tone}" stroke-width="4" stroke-linecap="round"
+                stroke-dasharray="${dash}" stroke-dashoffset="${offset}"></circle>
+            </svg>
+            <span class="edu-archreview-card-score-num">${r.score}</span>
+          </span>
+        </div>
+        <div class="edu-archreview-card-body">
+          <h3>${r.name}</h3>
+          <div class="edu-archreview-card-meta">
+            <i data-lucide="clock"></i><span>${r.when} · ${r.components} components</span>
+          </div>
+          <div class="edu-archreview-card-counts">
+            <span class="edu-pill-dot edu-pill-dot--danger"><i></i>${r.counts.high} high</span>
+            <span class="edu-pill-dot edu-pill-dot--amber"><i></i>${r.counts.medium} medium</span>
+            <span class="edu-pill-dot edu-pill-dot--neutral"><i></i>${r.counts.low} low</span>
+          </div>
+        </div>
+      </article>
+    `;
+  }).join("");
+
+  // Wire click handlers — only saved cards open the detail screen for now.
+  grid.querySelectorAll(".edu-archreview-card[data-saved='1']").forEach((card) => {
+    const id = card.dataset.id;
+    const open = () => openSavedReview(id);
+    card.addEventListener("click", open);
+    card.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } });
+  });
+  if (window.lucide) window.lucide.createIcons();
+}
+
+function renderProviderCell(provider, entry, color) {
+  if (!entry) {
+    return `<div class="edu-services-cell edu-services-cell--empty">— No direct equivalent</div>`;
+  }
+  const [name, desc] = entry;
+  return `
+    <div class="edu-services-cell edu-services-cell--${provider}">
+      <span class="edu-dot" style="background: ${color};"></span>
+      <div class="edu-services-cell-text">
+        <strong>${name}</strong>
+        <span>${desc || ""}</span>
+      </div>
+    </div>
+  `;
+}

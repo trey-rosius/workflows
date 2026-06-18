@@ -14,6 +14,9 @@
   <!-- CSS Styling -->
   <link rel="stylesheet" href="design-tokens/styles.css">
   <link rel="stylesheet" href="style.css">
+
+  <!-- Lucide icons (CDN). Use <i data-lucide="name"></i> placeholders; lucide.createIcons() swaps them in. -->
+  <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
   
@@ -26,268 +29,398 @@
     </button>
     <div id="sidebar-overlay" class="sidebar-overlay"></div>
 
-    <!-- Sidebar: Sleek Left Panel -->
-    <aside id="sidebar" class="sidebar">
-      <header class="sidebar-header" style="margin-bottom: 1.5rem;">
-        <div class="logo" style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
-          <div style="display: flex; align-items: center; gap: 0.75rem;">
-            <svg class="logo-icon-svg" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink: 0;">
-              <circle cx="12" cy="12" r="10" fill="url(#logoGrad)" />
-              <path d="M12 6L14 10L18 12L14 14L12 18L10 14L6 12L10 10L12 6Z" fill="white" />
-              <defs>
-                <linearGradient id="logoGrad" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
-                  <stop stop-color="#a855f7" />
-                  <stop offset="1" stop-color="#6366f1" />
-                </linearGradient>
-              </defs>
-            </svg>
-            <span class="logo-text-sleek" style="font-family: var(--font-family); font-weight: 700; font-size: 1.25rem; color: var(--text-bright); letter-spacing: -0.5px;">Zyricon</span>
-          </div>
-          <div class="header-divider" style="width: 1px; height: 16px; background: rgba(255, 255, 255, 0.08); margin: 0 0.5rem 0 1rem; display: inline-block;"></div>
-          <button id="btn-collapse-sidebar" style="background: transparent; border: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0.25rem; transition: var(--transition-smooth); outline: none;">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-              <line x1="9" y1="3" x2="9" y2="21" />
-            </svg>
+    <!-- EduCloud Academy sidebar (glassmorphic) -->
+    <aside id="sidebar" class="edu-sidebar">
+      <div class="edu-sidebar-brand">
+        <img src="assets/logo-icon.png" alt="EduCloud Academy" width="36" height="36">
+        <div class="edu-sidebar-brand-text">
+          <span class="brand-gradient-text edu-sidebar-brand-name">educloud</span>
+          <span class="edu-sidebar-brand-mark">ACADEMY</span>
+        </div>
+      </div>
+
+      <nav class="edu-nav">
+        <button id="side-nav-home" class="edu-nav-item" data-screen="home">
+          <i data-lucide="house"></i><span>Home</span>
+        </button>
+        <button id="side-nav-telemetry" class="edu-nav-item" data-screen="community">
+          <i data-lucide="users"></i><span>Communities</span><span class="edu-nav-badge">3</span>
+        </button>
+        <button id="side-nav-chat" class="edu-nav-item active" data-screen="chat">
+          <i data-lucide="sparkles"></i><span>AI Tutor</span>
+        </button>
+        <button id="side-nav-myreviews" class="edu-nav-item" data-screen="archreview">
+          <i data-lucide="shield-check"></i><span>My Reviews</span>
+        </button>
+        <button id="side-nav-library" class="edu-nav-item" data-screen="library">
+          <i data-lucide="graduation-cap"></i><span>Course Library</span>
+        </button>
+        <button id="side-nav-demand" class="edu-nav-item" data-screen="services">
+          <i data-lucide="layout-grid"></i><span>Cloud Services</span>
+        </button>
+        <button id="side-nav-analyzer" class="edu-nav-item" data-screen="explore">
+          <i data-lucide="compass"></i><span>Explore</span>
+        </button>
+      </nav>
+
+      <div class="edu-sidebar-group">
+        <div class="eyebrow edu-sidebar-group-label">Your communities</div>
+        <button class="edu-community-item" data-community="aws-serverless">
+          <span class="edu-community-icon" style="color: var(--pink-500);"><i data-lucide="cloud"></i></span>
+          <span>AWS Serverless</span>
+        </button>
+        <button class="edu-community-item" data-community="gen-ai">
+          <span class="edu-community-icon" style="color: var(--orange-500);"><i data-lucide="sparkles"></i></span>
+          <span>Generative AI Builders</span>
+        </button>
+        <button class="edu-community-item" data-community="data-eng">
+          <span class="edu-community-icon" style="color: var(--coral-500);"><i data-lucide="database"></i></span>
+          <span>Data Engineering</span>
+        </button>
+      </div>
+
+      <div class="edu-sidebar-footer">
+        <button class="edu-nav-item" id="btn-settings">
+          <i data-lucide="settings"></i><span>Settings</span>
+        </button>
+        <button class="edu-user-pill" id="btn-user-pill">
+          <span class="edu-avatar" data-online="true">
+            <img src="https://i.pravatar.cc/80?img=47" alt="">
+          </span>
+          <span class="edu-user-pill-meta">
+            <span class="edu-user-pill-name">Ada Nwosu</span>
+            <span class="edu-user-pill-sub">View profile</span>
+          </span>
+          <i data-lucide="chevron-right" class="edu-user-pill-chev"></i>
+        </button>
+      </div>
+
+      <!-- Existing hidden contextual sidebars (course/analyzer) preserved for legacy code paths -->
+      <div id="courses-sidebar-contents" class="hidden" style="display: none;">
+        <h2 class="section-title">Course Navigator <span id="course-count-badge" class="badge">0</span></h2>
+        <button id="btn-admin-ingest" class="btn-primary">Ingest Courses</button>
+        <div id="courses-sidebar-list" class="video-list">
+          <div class="loading-spinner-small">Loading courses...</div>
+        </div>
+      </div>
+      <div id="analyzer-sidebar-contents" class="hidden" style="display: none;">
+        <h2 class="section-title"><span>Analyzed Videos</span><span id="video-count-badge" class="badge">0</span></h2>
+        <button id="btn-refresh" class="btn-icon-text">Refresh Library</button>
+        <div id="video-list" class="video-list">
+          <div class="loading-spinner-small">Loading videos...</div>
+        </div>
+      </div>
+      <button id="btn-collapse-sidebar" hidden></button>
+      <button id="btn-new-chat-sidebar" hidden></button>
+    </aside>
+
+    <main class="edu-main">
+      <!-- Global topbar — title/subtitle/actions swap based on the active screen. -->
+      <header class="edu-topbar">
+        <div class="edu-topbar-title">
+          <h1 id="edu-screen-title">AI Tutor</h1>
+          <p id="edu-screen-subtitle" hidden></p>
+        </div>
+        <div class="edu-topbar-actions" id="edu-topbar-actions">
+          <button id="btn-theme-toggle" class="edu-icon-btn" aria-label="Toggle theme">
+            <i data-lucide="moon"></i>
           </button>
+          <span class="edu-topbar-bell-wrap">
+            <button class="edu-icon-btn" aria-label="Activity"><i data-lucide="bell"></i></button>
+            <span class="edu-topbar-bell-dot"></span>
+          </span>
+          <button id="btn-new-chat-top" class="edu-btn edu-btn--secondary edu-btn--sm">
+            <i data-lucide="plus"></i><span>New chat</span>
+          </button>
+          <button id="btn-back-to-chat-top" class="edu-btn edu-btn--secondary edu-btn--sm" hidden>
+            <i data-lucide="arrow-left"></i><span>Back to chat</span>
+          </button>
+          <!-- Legacy hidden buttons preserved for any code that references them -->
+          <button id="btn-chat-config" hidden></button>
+          <button id="btn-chat-export" hidden></button>
+          <select id="select-model" hidden><option value="nova-lite"></option></select>
         </div>
       </header>
 
-      <button id="btn-new-chat-sidebar" class="btn-new-chat" style="display: flex; align-items: center; justify-content: center; gap: 0.5rem; width: 100%; padding: 0.7rem; border-radius: 20px; border: 1px solid rgba(255, 255, 255, 0.12); background: rgba(255, 255, 255, 0.03); color: var(--text-main); font-family: var(--font-family); font-size: 0.85rem; font-weight: 500; cursor: pointer; transition: var(--transition-smooth); margin-bottom: 1.5rem; outline: none;">
-        <span>＋</span> New Chat
-      </button>
-
-      <div class="sidebar-scrollable-content custom-scrollbar" style="flex-grow: 1; display: flex; flex-direction: column; gap: 1.5rem; overflow-y: auto; margin-bottom: 1rem; padding-right: 0.2rem;">
-        <!-- Navigation Menu -->
-        <div class="sidebar-section">
-          <h3 class="sidebar-section-title" style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.5px; margin-bottom: 0.75rem; padding-left: 0.5rem;">Menu</h3>
-          <ul class="sidebar-menu" style="list-style: none; display: flex; flex-direction: column; gap: 0.25rem; padding: 0; margin: 0;">
-            <li>
-              <button id="side-nav-chat" class="sidebar-menu-item active">
-                <span class="menu-icon-wrapper" style="display: flex; align-items: center; justify-content: center; width: 20px; height: 20px;">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+      <!-- AI Tutor chat workspace -->
+      <div id="chat-workspace-container" class="workspace-tab-container edu-screen">
+        <div class="edu-chat-area">
+          <div id="main-chat-welcome" class="edu-welcome">
+            <div class="edu-welcome-icon"><i data-lucide="sparkles"></i></div>
+            <h2 class="edu-welcome-title">Hi Ada — what are we learning today?</h2>
+            <p class="edu-welcome-subtitle">Your AI tutor remembers your courses and meets you where you are.</p>
+            <div class="edu-suggestion-grid">
+              <button class="edu-suggestion-card suggestion-pill" data-prompt="Explain how AWS Lambda cold starts work">
+                <span class="edu-suggestion-icon"><i data-lucide="lightbulb"></i></span>
+                <span class="edu-suggestion-body">
+                  <span class="edu-suggestion-title">Explain a concept</span>
+                  <span class="edu-suggestion-sub">Explain how AWS Lambda cold starts work</span>
                 </span>
-                <span class="menu-label">AI Tutor Chat</span>
               </button>
-            </li>
-            <li>
-              <button id="side-nav-analyzer" class="sidebar-menu-item">
-                <span class="menu-icon-wrapper" style="display: flex; align-items: center; justify-content: center; width: 20px; height: 20px;">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"></path><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
+              <button class="edu-suggestion-card suggestion-pill" data-prompt="Quiz me on this week's serverless lesson">
+                <span class="edu-suggestion-icon"><i data-lucide="list-checks"></i></span>
+                <span class="edu-suggestion-body">
+                  <span class="edu-suggestion-title">Quiz me</span>
+                  <span class="edu-suggestion-sub">Quiz me on this week's serverless lesson</span>
                 </span>
-                <span class="menu-label">Video AI Analyzer</span>
               </button>
-            </li>
-            <li>
-              <button id="side-nav-library" class="sidebar-menu-item">
-                <span class="menu-icon-wrapper" style="display: flex; align-items: center; justify-content: center; width: 20px; height: 20px;">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+              <button class="edu-suggestion-card" id="suggestion-review-work">
+                <span class="edu-suggestion-icon"><i data-lucide="bug"></i></span>
+                <span class="edu-suggestion-body">
+                  <span class="edu-suggestion-title">Review my work</span>
+                  <span class="edu-suggestion-sub">Upload an architecture diagram and I'll review it</span>
                 </span>
-                <span class="menu-label">Course Library</span>
               </button>
-            </li>
-            <li>
-              <button id="side-nav-telemetry" class="sidebar-menu-item">
-                <span class="menu-icon-wrapper" style="display: flex; align-items: center; justify-content: center; width: 20px; height: 20px;">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+              <button class="edu-suggestion-card suggestion-pill" data-prompt="Build me a 2-week study plan for the AWS AI exam">
+                <span class="edu-suggestion-icon"><i data-lucide="calendar"></i></span>
+                <span class="edu-suggestion-body">
+                  <span class="edu-suggestion-title">Plan my study</span>
+                  <span class="edu-suggestion-sub">Build a 2-week plan for the AWS AI exam</span>
                 </span>
-                <span class="menu-label">Telemetry & Evals</span>
-              </button>
-            </li>
-            <li>
-              <button id="side-nav-demand" class="sidebar-menu-item">
-                <span class="menu-icon-wrapper" style="display: flex; align-items: center; justify-content: center; width: 20px; height: 20px;">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-                </span>
-                <span class="menu-label">Demanded Content</span>
-              </button>
-            </li>
-          </ul>
-        </div>
-
-        <!-- Sidebar Contents for Course Portal (Initially Hidden, shown when studying a course) -->
-        <div id="courses-sidebar-contents" class="hidden" style="border-top: 1px solid rgba(255,255,255,0.06); padding-top: 1rem;">
-          <section class="courses-nav-section">
-            <h2 class="section-title">Course Navigator <span id="course-count-badge" class="badge">0</span></h2>
-            
-            <button id="btn-admin-ingest" class="btn-primary" style="width: 100%; margin-bottom: 1.25rem; font-size: 0.85rem; padding: 0.6rem; display: flex; align-items: center; justify-content: center; gap: 0.4rem; box-shadow: 0 4px 10px rgba(6, 182, 212, 0.2);">
-              <span>⚙️</span> Ingest Courses
-            </button>
-
-            <div id="courses-sidebar-list" class="video-list">
-              <!-- Dynamically populated courses -->
-              <div class="loading-spinner-small">Loading courses...</div>
-            </div>
-          </section>
-        </div>
-
-        <!-- Sidebar Contents for Analyzer (Initially Hidden, shown when not studying a course) -->
-        <div id="analyzer-sidebar-contents" class="hidden" style="border-top: 1px solid rgba(255,255,255,0.06); padding-top: 1rem;">
-          <!-- Video History Section -->
-          <section class="history-section">
-            <h2 class="section-title" style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.5px; margin-bottom: 0.75rem; display: flex; justify-content: space-between; align-items: center;">
-              <span>Analyzed Videos</span>
-              <span id="video-count-badge" class="badge">0</span>
-            </h2>
-            
-            <!-- Refresh Button -->
-            <button id="btn-refresh" class="btn-icon-text" style="width: 100%; margin-bottom: 0.75rem; font-size: 0.75rem; padding: 0.40rem; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; color: var(--text-main); cursor: pointer;">
-              <span>🔄</span> Refresh Library
-            </button>
-
-            <div id="video-list" class="video-list" style="display: flex; flex-direction: column; gap: 0.35rem; max-height: 250px; overflow-y: auto;">
-              <!-- Dynamically populated files -->
-              <div class="loading-spinner-small">Loading videos...</div>
-            </div>
-          </section>
-        </div>
-      </div>
-
-      <!-- Upgrade to Premium Bottom Card -->
-      <div class="sidebar-premium-card" style="margin-top: auto; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(147, 51, 234, 0.15); border-radius: 12px; padding: 1rem; position: relative; overflow: hidden; flex-shrink: 0; display: flex; flex-direction: column; gap: 0.5rem;">
-        <div style="position: absolute; top: -10px; right: -10px; width: 60px; height: 60px; background: radial-gradient(circle, rgba(147, 51, 234, 0.15) 0%, transparent 70%); pointer-events: none;"></div>
-        <div class="premium-crown-circle" style="display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 50%; color: #c084fc; font-size: 0.9rem;">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M2 4l3 12h14l3-12-6 7-4-7-4 7-6-7z" />
-          </svg>
-        </div>
-        <h4 style="font-size: 0.85rem; font-weight: 600; color: var(--text-bright); margin: 0;">Upgrade to premium</h4>
-        <p style="font-size: 0.75rem; color: var(--text-muted); line-height: 1.3; margin: 0;">Boost productivity with seamless automation and responsive AI built to adapt to your needs.</p>
-      </div>
-    </aside>
-
-    <!-- Main Workspace: Video Player & Generated Insights -->
-    <main class="main-content" style="flex-grow: 1; overflow: hidden; background: radial-gradient(circle at center, #1b0c30 0%, #080312 100%); display: flex; flex-direction: column; position: relative;">
-      
-      <!-- TAB 1: Chat Dashboard (Zyricon style) -->
-      <div id="chat-workspace-container" class="workspace-tab-container" style="height: 100%; display: flex; flex-direction: column; overflow: hidden; position: relative; padding: 1.5rem 2rem 2rem 2rem;">
-        <!-- Top Bar -->
-        <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-shrink: 0; width: 100%;">
-          <div class="model-selector-container">
-            <select id="select-model" style="background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 20px; color: var(--text-main); padding: 0.45rem 1.4rem; font-family: var(--font-family); font-size: 0.8rem; font-weight: 600; cursor: pointer; outline: none; appearance: none; -webkit-appearance: none; padding-right: 2.2rem; background-image: url('data:image/svg+xml;utf8,<svg xmlns=&quot;http://www.w3.org/2000/svg&quot; width=&quot;24&quot; height=&quot;24&quot; fill=&quot;rgba(255,255,255,0.7)&quot;><path d=&quot;M7 10l5 5 5-5z&quot;/></svg>'); background-repeat: no-repeat; background-position: right 0.8rem center; background-size: 1rem;">
-              <option value="nova-lite">🤖 Nova Lite v1.0 (Fast)</option>
-              <option value="nova-pro">🧠 Nova Pro v1.0 (Complex)</option>
-            </select>
-          </div>
-          <div style="display: flex; gap: 0.75rem; align-items: center;">
-            <button id="btn-chat-config" style="background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 20px; color: var(--text-main); padding: 0.45rem 1.2rem; font-family: var(--font-family); font-size: 0.8rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; transition: var(--transition-smooth); outline: none;">
-              ⚙️ Configuration
-            </button>
-            <button id="btn-chat-export" style="background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 20px; color: var(--text-main); padding: 0.45rem 1.2rem; font-family: var(--font-family); font-size: 0.8rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; transition: var(--transition-smooth); outline: none;">
-              📤 Export
-            </button>
-          </div>
-        </header>
-
-        <!-- Dynamic Chat Area -->
-        <div style="flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; width: 100%;">
-          
-          <!-- Welcome Screen (Default empty state) -->
-          <div id="main-chat-welcome" style="display: flex; flex-direction: column; justify-content: center; align-items: center; flex-grow: 1; text-align: center; padding: 1.5rem 1rem;">
-            <!-- Glowing Purple Orb -->
-            <div class="purple-orb-wrapper" style="display: flex; justify-content: center; align-items: center; margin-bottom: 2rem;">
-              <div class="glowing-purple-orb"></div>
-            </div>
-            
-            <h1 class="welcome-heading" style="font-family: var(--font-family); font-weight: 600; font-size: 2.5rem; color: var(--text-bright); text-align: center; margin-bottom: 2rem; letter-spacing: -0.5px;">Ready to Create Something New?</h1>
-            
-            <!-- Suggestions Pills -->
-            <div class="suggestion-pills-container" style="display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; margin-bottom: 1.5rem; max-width: 650px; margin-left: auto; margin-right: auto;">
-              <button class="suggestion-pill" data-prompt="Start Diagnostic Quiz" style="display: flex; align-items: center; gap: 0.5rem; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 20px; padding: 0.55rem 1.25rem; color: var(--text-main); font-family: var(--font-family); font-size: 0.8rem; font-weight: 500; cursor: pointer; transition: var(--transition-smooth); outline: none;">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-muted);"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-                Create Study Guide
-              </button>
-              <button class="suggestion-pill" data-prompt="Explain the difference between S3 and CloudFront using an analogy" style="display: flex; align-items: center; gap: 0.5rem; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 20px; padding: 0.55rem 1.25rem; color: var(--text-main); font-family: var(--font-family); font-size: 0.8rem; font-weight: 500; cursor: pointer; transition: var(--transition-smooth); outline: none;">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-muted);"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 1 1 7.072 0l-.548.547A3.374 3.374 0 0 0 14 18.469V19a2 2 0 0 1-2 2h0a2 2 0 0 1-2-2v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
-                Brainstorm Concepts
-              </button>
-              <button class="suggestion-pill" data-prompt="Recommend courses related to AWS AppSync and serverless" style="display: flex; align-items: center; gap: 0.5rem; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 20px; padding: 0.55rem 1.25rem; color: var(--text-main); font-family: var(--font-family); font-size: 0.8rem; font-weight: 500; cursor: pointer; transition: var(--transition-smooth); outline: none;">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-muted);"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
-                Make Learning Plan
               </button>
             </div>
           </div>
 
-          <!-- Chat Stream (Initially Hidden, shown when messages sent) -->
-          <div id="main-chat-stream" class="hidden custom-scrollbar" style="flex-grow: 1; overflow-y: auto; padding: 1rem 0; display: flex; flex-direction: column; gap: 1.25rem; width: 100%; max-width: 800px; margin-left: auto; margin-right: auto; padding-right: 0.5rem;">
-            <!-- Message bubbles -->
-          </div>
+          <div id="main-chat-stream" class="hidden custom-scrollbar edu-chat-stream"></div>
 
-          <!-- Prompt Box -->
-          <!-- Prompt Box -->
-          <div class="main-prompt-box-wrapper" style="width: 100%; max-width: 800px; margin-left: auto; margin-right: auto; margin-top: auto; padding-top: 1rem; flex-shrink: 0;">
-            <div class="main-prompt-box" style="background: rgba(21, 18, 27, 0.7); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 16px; padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem; position: relative;">
+          <div class="edu-composer-wrap">
+            <div class="main-prompt-box edu-composer">
               <div id="diagram-attachment-chip" class="diagram-attachment-chip" style="display: none;"></div>
-              <div style="display: flex; gap: 0.75rem; align-items: flex-start;">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="color: #a855f7; flex-shrink: 0; margin-top: 0.15rem;">
-                  <path d="M12 3L14.4 9.6L21 12L14.4 14.4L12 21L9.6 14.4L3 12L9.6 9.6L12 3Z" fill="currentColor"/>
-                </svg>
-                <textarea id="main-chat-input" placeholder="Ask Anything..." rows="2" style="flex-grow: 1; background: transparent; border: none; resize: none; outline: none; color: var(--text-bright); font-family: var(--font-family); font-size: 0.95rem; line-height: 1.5; padding: 0.25rem 0;" class="custom-scrollbar"></textarea>
-              </div>
-              <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 0.75rem; margin-top: 0.25rem;">
-                <div style="display: flex; gap: 0.25rem;">
+              <textarea id="main-chat-input" rows="1" placeholder="Ask anything — concepts, feedback, a quiz…" class="edu-composer-textarea custom-scrollbar"></textarea>
+              <div class="edu-composer-row">
+                <div class="edu-composer-left">
                   <input id="diagram-file-input" type="file" accept="image/png,image/jpeg" style="display: none;">
-                  <button id="btn-chat-attach-diagram" class="chat-action-btn" title="Attach a cloud architecture diagram for review" style="background: transparent; border: none; color: var(--text-muted); cursor: pointer; padding: 0.35rem 0.6rem; font-size: 0.8rem; display: flex; align-items: center; gap: 0.4rem; transition: var(--transition-smooth); outline: none; border-radius: 6px;">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
-                    <span style="font-size: 0.75rem; font-weight: 500;">Review diagram</span>
+                  <button id="btn-chat-attach-diagram" class="edu-icon-btn" title="Attach an architecture diagram">
+                    <i data-lucide="image"></i>
                   </button>
-                  <button class="chat-action-btn" title="Settings" style="background: transparent; border: none; color: var(--text-muted); cursor: pointer; padding: 0.35rem 0.6rem; font-size: 0.8rem; display: flex; align-items: center; gap: 0.4rem; transition: var(--transition-smooth); outline: none; border-radius: 6px;">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>
-                    <span style="font-size: 0.75rem; font-weight: 500;">Settings</span>
+                  <button class="edu-icon-btn" title="Attach file" aria-label="Attach file">
+                    <i data-lucide="paperclip"></i>
                   </button>
-                  <button class="chat-action-btn" title="Options" style="background: transparent; border: none; color: var(--text-muted); cursor: pointer; padding: 0.35rem 0.6rem; font-size: 0.8rem; display: flex; align-items: center; gap: 0.4rem; transition: var(--transition-smooth); outline: none; border-radius: 6px;">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
-                    <span style="font-size: 0.75rem; font-weight: 500;">Options</span>
-                  </button>
+                  <span class="edu-tutor-mode-pill">
+                    <i data-lucide="sparkles"></i><span>Tutor mode</span>
+                  </span>
                 </div>
-                <div style="display: flex; gap: 0.75rem; align-items: center;">
-                  <button id="btn-chat-mic" style="background: transparent; border: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0.25rem; transition: var(--transition-smooth); outline: none;">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
-                  </button>
-                  <button id="btn-chat-send" style="width: 32px; height: 32px; border-radius: 50%; background: #a855f7; border: none; color: white; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: var(--transition-smooth); outline: none; box-shadow: 0 4px 12px rgba(168, 85, 247, 0.3); display: flex; align-items: center; justify-content: center;">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
+                <div class="edu-composer-right">
+                  <span class="edu-composer-hint">↵ to send</span>
+                  <button id="btn-chat-mic" class="edu-icon-btn" hidden aria-label="Microphone"><i data-lucide="mic"></i></button>
+                  <button id="btn-chat-send" class="edu-send-btn" aria-label="Send">
+                    <i data-lucide="arrow-up"></i>
                   </button>
                 </div>
               </div>
             </div>
+            <p class="edu-composer-disclaimer">Educloud AI can make mistakes. Verify important information.</p>
           </div>
 
-          <!-- Feature Cards at the Bottom (Only visible when welcome is shown) -->
-          <div id="main-chat-feature-cards" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; width: 100%; max-width: 800px; margin-left: auto; margin-right: auto; margin-top: 1.5rem; flex-shrink: 0;">
-            <div id="card-video-ai" class="feature-card-item" style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; padding: 1rem; cursor: pointer; display: flex; align-items: center; gap: 1rem; transition: var(--transition-smooth);">
-              <div class="feature-card-icon-wrapper" style="display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.1); background: rgba(255, 255, 255, 0.02); flex-shrink: 0;">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-bright);"><path d="M23 7l-7 5 7 5V7z"></path><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
-              </div>
-              <div style="display: flex; flex-direction: column; gap: 0.25rem;">
-                <span class="feature-card-badge" style="font-size: 0.65rem; background: rgba(255, 255, 255, 0.06); padding: 0.15rem 0.5rem; border-radius: 10px; color: var(--text-muted); font-weight: 600; width: fit-content; text-transform: uppercase; letter-spacing: 0.5px;">Analyze Video</span>
-                <h4 class="feature-card-title" style="font-size: 0.85rem; font-weight: 600; color: var(--text-bright); margin: 0;">Video AI Analyzer</h4>
-              </div>
-            </div>
-            
-            <div id="card-library" class="feature-card-item" style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; padding: 1rem; cursor: pointer; display: flex; align-items: center; gap: 1rem; transition: var(--transition-smooth);">
-              <div class="feature-card-icon-wrapper" style="display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.1); background: rgba(255, 255, 255, 0.02); flex-shrink: 0;">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-bright);"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
-              </div>
-              <div style="display: flex; flex-direction: column; gap: 0.25rem;">
-                <span class="feature-card-badge" style="font-size: 0.65rem; background: rgba(255, 255, 255, 0.06); padding: 0.15rem 0.5rem; border-radius: 10px; color: var(--text-muted); font-weight: 600; width: fit-content; text-transform: uppercase; letter-spacing: 0.5px;">Open Library</span>
-                <h4 class="feature-card-title" style="font-size: 0.85rem; font-weight: 600; color: var(--text-bright); margin: 0;">Course Library</h4>
-              </div>
-            </div>
-            
-            <div id="card-diagnostic" class="feature-card-item" style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; padding: 1rem; cursor: pointer; display: flex; align-items: center; gap: 1rem; transition: var(--transition-smooth);">
-              <div class="feature-card-icon-wrapper" style="display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.1); background: rgba(255, 255, 255, 0.02); flex-shrink: 0;">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-bright);"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-              </div>
-              <div style="display: flex; flex-direction: column; gap: 0.25rem;">
-                <span class="feature-card-badge" style="font-size: 0.65rem; background: rgba(255, 255, 255, 0.06); padding: 0.15rem 0.5rem; border-radius: 10px; color: var(--text-muted); font-weight: 600; width: fit-content; text-transform: uppercase; letter-spacing: 0.5px;">Start Quiz</span>
-                <h4 class="feature-card-title" style="font-size: 0.85rem; font-weight: 600; color: var(--text-bright); margin: 0;">Diagnostic Quiz</h4>
-              </div>
-            </div>
+          <!-- Legacy feature cards kept hidden -->
+          <div id="main-chat-feature-cards" hidden>
+            <div id="card-video-ai"></div>
+            <div id="card-library"></div>
+            <div id="card-diagnostic"></div>
           </div>
-
         </div>
       </div>
-      
+
+      <!-- ============================================================
+           EduCloud Academy screens (Phase 2)
+           ============================================================ -->
+
+      <!-- Home dashboard (overview / landing) -->
+      <div id="home-workspace-container" class="workspace-tab-container edu-screen hidden">
+        <div class="edu-home">
+          <section class="edu-home-hero">
+            <div class="edu-home-hero-text">
+              <span class="eyebrow">Welcome back</span>
+              <h2>Hi Ada — your learning, in one place</h2>
+              <p>Continue a course, jump back into the AI tutor, or check what your communities are talking about right now.</p>
+            </div>
+            <div class="edu-home-hero-actions">
+              <button class="edu-btn edu-btn--primary" data-jump="chat"><i data-lucide="sparkles"></i><span>Ask the tutor</span></button>
+              <button class="edu-btn edu-btn--secondary" data-jump="library"><i data-lucide="graduation-cap"></i><span>Course Library</span></button>
+            </div>
+          </section>
+
+          <section class="edu-home-grid">
+            <a class="edu-home-tile" data-jump="services">
+              <span class="edu-home-tile-icon" style="background: var(--surface-pink-soft); color: var(--pink-600);"><i data-lucide="layout-grid"></i></span>
+              <span class="edu-home-tile-body">
+                <span class="edu-home-tile-title">Cloud Services Map</span>
+                <span class="edu-home-tile-sub">26 services compared across AWS, Azure, GCP, Oracle.</span>
+              </span>
+            </a>
+            <a class="edu-home-tile" data-jump="community">
+              <span class="edu-home-tile-icon" style="background: var(--surface-orange-soft); color: var(--orange-600);"><i data-lucide="users"></i></span>
+              <span class="edu-home-tile-body">
+                <span class="edu-home-tile-title">Communities</span>
+                <span class="edu-home-tile-sub">Find your people and learn together — 1,327 online now.</span>
+              </span>
+            </a>
+            <a class="edu-home-tile" data-jump="chat">
+              <span class="edu-home-tile-icon" style="background: rgba(245, 100, 118, 0.12); color: var(--coral-500);"><i data-lucide="bug"></i></span>
+              <span class="edu-home-tile-body">
+                <span class="edu-home-tile-title">Review my work</span>
+                <span class="edu-home-tile-sub">Upload an architecture diagram for an AI review.</span>
+              </span>
+            </a>
+          </section>
+        </div>
+      </div>
+
+      <!-- Communities screen -->
+      <div id="community-workspace-container" class="workspace-tab-container edu-screen hidden">
+        <div class="edu-community-screen">
+          <section class="edu-community-hero">
+            <div class="edu-community-hero-copy">
+              <h2>Find your people</h2>
+              <p>Join cohort-driven communities. Weekly build-alongs, study rooms, and challenges — learn alongside thousands of cloud + AI builders.</p>
+              <button class="edu-btn edu-btn--secondary edu-community-hero-cta">
+                <span>Browse all topics</span>
+                <i data-lucide="arrow-right"></i>
+              </button>
+            </div>
+            <div class="edu-community-hero-stat">
+              <span class="edu-community-hero-stat-num">1,327</span>
+              <span class="edu-community-hero-stat-label">online &amp; studying right now</span>
+            </div>
+          </section>
+
+          <div class="edu-chip-row" data-chip-group="community">
+            <button class="edu-chip edu-chip--active" data-filter="all">All</button>
+            <button class="edu-chip" data-filter="AWS">AWS</button>
+            <button class="edu-chip" data-filter="AI/ML">AI/ML</button>
+            <button class="edu-chip" data-filter="Data">Data</button>
+            <button class="edu-chip" data-filter="Azure">Azure</button>
+            <button class="edu-chip" data-filter="Certs">Certs</button>
+            <button class="edu-chip" data-filter="DevOps">DevOps</button>
+          </div>
+
+          <div class="edu-community-grid" id="edu-community-grid">
+            <!-- Cards rendered by JS from EDU_COMMUNITIES -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Cloud Services Map -->
+      <div id="services-workspace-container" class="workspace-tab-container edu-screen hidden">
+        <div class="edu-services">
+          <section class="edu-services-legend">
+            <span class="edu-services-legend-icon"><i data-lucide="cloud"></i></span>
+            <div class="edu-services-legend-text">
+              <strong>Learn it once, recognise it everywhere</strong>
+              <span>Hover a row to highlight the equivalent service across all four clouds.</span>
+            </div>
+            <div class="edu-services-legend-dots">
+              <span><i class="edu-dot" style="background: var(--orange-500);"></i> aws</span>
+              <span><i class="edu-dot" style="background: #3b82f6;"></i> Azure</span>
+              <span><i class="edu-dot" style="background: var(--success);"></i> Google Cloud</span>
+              <span><i class="edu-dot" style="background: var(--danger);"></i> Oracle Cloud</span>
+            </div>
+            <span class="edu-services-legend-pill" id="edu-services-count">26 service types</span>
+          </section>
+
+          <div class="edu-services-controls">
+            <div class="edu-chip-row" data-chip-group="services">
+              <button class="edu-chip edu-chip--active" data-filter="all">All</button>
+              <button class="edu-chip" data-filter="Compute">Compute</button>
+              <button class="edu-chip" data-filter="Storage">Storage</button>
+              <button class="edu-chip" data-filter="Databases">Databases</button>
+              <button class="edu-chip" data-filter="Containers">Containers</button>
+              <button class="edu-chip" data-filter="Networking">Networking</button>
+              <button class="edu-chip" data-filter="AI & ML">AI &amp; ML</button>
+              <button class="edu-chip" data-filter="Security & Identity">Security &amp; Identity</button>
+              <button class="edu-chip" data-filter="Management & Ops">Management &amp; Ops</button>
+              <button class="edu-chip" data-filter="Integration">Integration</button>
+            </div>
+            <div class="edu-input-wrap">
+              <i data-lucide="search"></i>
+              <input id="edu-services-search" type="search" placeholder="Search services" class="edu-input">
+            </div>
+          </div>
+
+          <div class="edu-services-table" id="edu-services-table">
+            <div class="edu-services-header">
+              <div class="edu-services-header-cell edu-services-header-cell--concept">SERVICE TYPE</div>
+              <div class="edu-services-header-cell edu-services-header-cell--aws"><span class="edu-dot" style="background: var(--orange-500);"></span><div><strong>aws</strong><span>Amazon Web Services</span></div></div>
+              <div class="edu-services-header-cell edu-services-header-cell--azure"><span class="edu-dot" style="background: #3b82f6;"></span><div><strong>Azure</strong><span>Microsoft Azure</span></div></div>
+              <div class="edu-services-header-cell edu-services-header-cell--gcp"><span class="edu-dot" style="background: var(--success);"></span><div><strong>Google Cloud</strong><span>Google Cloud Platform</span></div></div>
+              <div class="edu-services-header-cell edu-services-header-cell--oracle"><span class="edu-dot" style="background: var(--danger);"></span><div><strong>Oracle Cloud</strong><span>Oracle Cloud Infra (OCI)</span></div></div>
+            </div>
+            <div id="edu-services-body"><!-- rendered by JS --></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Architecture Review detail (single review, diagram + findings side-by-side) -->
+      <div id="archreview-detail-workspace-container" class="workspace-tab-container edu-screen hidden">
+        <div class="edu-archdetail">
+          <div class="edu-archdetail-toolbar">
+            <button class="edu-btn edu-btn--secondary edu-btn--sm" id="btn-archdetail-back">
+              <i data-lucide="arrow-left"></i><span>All reviews</span>
+            </button>
+          </div>
+          <div class="edu-archdetail-layout">
+            <div class="edu-archdetail-diagram">
+              <div class="edu-archdetail-canvas-wrap" id="edu-archdetail-canvas">
+                <img class="edu-archdetail-canvas-img" id="edu-archdetail-img" alt="">
+                <div class="edu-archdetail-canvas-highlight" id="edu-archdetail-highlight"></div>
+              </div>
+              <p class="edu-archdetail-hint" id="edu-archdetail-hint">Select a finding to zoom into the relevant component.</p>
+            </div>
+            <aside class="edu-archdetail-rail glass">
+              <header class="edu-archdetail-rail-header">
+                <span class="edu-archdetail-rail-icon"><i data-lucide="sparkles"></i></span>
+                <div class="edu-archdetail-rail-meta">
+                  <strong>Review complete</strong>
+                  <span id="edu-archdetail-summary">— findings across — components</span>
+                </div>
+                <span class="edu-archdetail-rail-ring" id="edu-archdetail-ring"></span>
+              </header>
+              <div class="edu-archdetail-rail-badges" id="edu-archdetail-badges"></div>
+              <div class="edu-archdetail-rail-list" id="edu-archdetail-list">
+                <!-- Findings rendered here -->
+              </div>
+            </aside>
+          </div>
+        </div>
+      </div>
+
+      <!-- Architecture Reviews list (AI Tutor sub-screen) -->
+      <div id="archreview-workspace-container" class="workspace-tab-container edu-screen hidden">
+        <div class="edu-archreview-list">
+          <div id="edu-archreview-dropzone" class="edu-archreview-dropzone" role="button" tabindex="0">
+            <span class="edu-archreview-dropzone-icon"><i data-lucide="upload"></i></span>
+            <div class="edu-archreview-dropzone-text">
+              <strong>New architecture review</strong>
+              <span>Drop a diagram image here or click to browse — the AI will review it against the Well-Architected pillars.</span>
+            </div>
+            <i data-lucide="arrow-right" class="edu-archreview-dropzone-arrow"></i>
+          </div>
+
+          <div class="edu-archreview-list-header">
+            <h2>Previous reviews</h2>
+            <span id="edu-archreview-count">2 reviews</span>
+          </div>
+
+          <div class="edu-archreview-grid" id="edu-archreview-grid">
+            <!-- Cards rendered by JS from EDU_ARCH_REVIEWS -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Achievements / Activity / Profile / Explore — placeholder stubs -->
+      <div id="achievements-workspace-container" class="workspace-tab-container edu-screen hidden">
+        <div class="edu-placeholder"><span class="edu-placeholder-icon"><i data-lucide="award"></i></span><h2>Achievements</h2><p>Badges, certificates, and ratings — coming soon.</p></div>
+      </div>
+      <div id="activity-workspace-container" class="workspace-tab-container edu-screen hidden">
+        <div class="edu-placeholder"><span class="edu-placeholder-icon"><i data-lucide="activity"></i></span><h2>Activity</h2><p>Your learning activity feed — coming soon.</p></div>
+      </div>
+      <div id="profile-workspace-container" class="workspace-tab-container edu-screen hidden">
+        <div class="edu-placeholder"><span class="edu-placeholder-icon"><i data-lucide="user"></i></span><h2>Profile</h2><p>Profile and settings — coming soon.</p></div>
+      </div>
+      <div id="explore-workspace-container" class="workspace-tab-container edu-screen hidden">
+        <div class="edu-placeholder"><span class="edu-placeholder-icon"><i data-lucide="compass"></i></span><h2>Explore</h2><p>Discovery and recommendations — coming soon.</p></div>
+      </div>
+
       <!-- TAB 2: Video Analyzer Workspace (Original Container 1, hidden by default) -->
       <div id="analyzer-workspace-container" class="workspace-tab-container hidden" style="height: 100%; display: flex; flex-direction: column;">
         <!-- Welcome Screen (Default) -->
